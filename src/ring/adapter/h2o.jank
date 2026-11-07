@@ -28,10 +28,7 @@
 ;; integer id; jank code refers to the request by id, and the bridge maps ids to
 ;; live requests so a body reader called after its request finished fails safely
 ;; instead of touching freed memory.
-;;
-;; No namespace-scope objects with constructors here: `jank compile` would run them
-;; while JIT-loading this module, which drags libh2o into the JIT (and it cannot
-;; link h2o's TLS relocations). Function-local statics are only built on first use.
+
 (cpp/raw "#include <cstdio>
 #include <mutex>
 #include <string>

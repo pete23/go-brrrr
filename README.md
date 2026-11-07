@@ -15,37 +15,67 @@ echo "deb [signed-by=/etc/apt/trusted.gpg.d/jank.gpg] https://ppa.jank-lang.org 
 sudo apt update && sudo apt install -y jank
 ```
 
-Build deps (already in the cloud image): `clang cmake ninja-build libssl-dev zlib1g-dev`.
-Tests also need `python3` and `curl`.
+Plus [Leiningen](https://leiningen.org/) (jank's project tool, via the
+[lein-jank](https://book.jank-lang.org/getting-started/03-hello-leiningen.html) plugin),
+[Babashka](https://babashka.org) (tasks, jank build scripts, integration tests) and
+bubblewrap (jank-build's sandbox), and the native toolchain:
+
+```bash
+sudo apt install -y leiningen bubblewrap clang cmake ninja-build libssl-dev zlib1g-dev curl
+bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
+```
 
 ## Use
 
 ```bash
-make run    # JIT; serves https://0.0.0.0:8443 (self-signed cert generated in certs/)
-make build  # AOT native binary at target/go-brrrr
-make test   # everything below
-make test-unit         # ring's own tests, ported, plus the adapter's pure helpers
-make test-integration  # the adapter against test/server/echo.jank, over h1, h2 and h3
-make test-app          # the app's endpoints, as the AOT binary and under the JIT
+bb run [port]          # JIT via `lein run`; https://0.0.0.0:8443 by default
+bb build               # release binary at target/release/go-brrrr (statically linked)
+bb test                # everything below
+bb test:unit           # `lein test`: ported ring tests plus the adapter's pure helpers
+bb test:integration    # the adapter against test/server/echo.jank, over h1, h2 and h3
+bb test:app            # the app's endpoints, as the release binary and under the JIT
+bb tasks               # the rest
 ```
+
+`lein run`, `lein test` and `lein compile` work directly too; the bb tasks add the
+submodule check, the dev cert and the release-build workaround below.
+
+## How it builds
+
+`project.clj` uses lein-jank, which runs the top-level `jank-build.bb` (sandboxed, with
+Babashka) before every run, test or compile. That script builds `vendor/h2o` with CMake and
+the C shim in `native/`, installs them into the jank-build output dir under
+`target/<profile>/_cache/`, and prints the include/link directives lein-jank passes to jank.
+It only re-runs when `native/`, `vendor/h2o` or the script itself change.
+
+jank's JIT can't link h2o's thread-local-storage relocations from a static archive (no
+initial-exec or local-dynamic support), so linking depends on the profile:
+
+- default (`run`, `test`, debug `compile`): `libbrrrr.so`, the shim with h2o inside. Its
+  SONAME is its absolute path, so debug binaries find it without an rpath.
+- `release`: fully static. jank's compile-time JIT loads previously cached module objects
+  and would then pull the archive into the JIT, so `bb build` clears jank's module cache for
+  the project first (the native build output is kept).
 
 ## Tests
 
-- **Unit** (`test/ring/**`, run by `test/unit/run.jank`, ~70 tests): upstream ring-core and
+- **Unit** (`test/ring/**`, run by `lein test`, ~70 tests): upstream ring-core and
   ring-codec tests for every ported namespace. Where we deviate (UTF-8 only, no files or
   InputStreams, ASCII-only keyword params), the upstream case is replaced by one asserting
   what we actually do, so deviations are pinned rather than silently untested.
-- **Integration** (`test/integration/test_adapter.py`, stdlib Python driving `curl` and
-  `h2o-httpclient`): the Ring request map on every protocol; exact, binary (NUL bytes),
-  large, chunked and streamed request bodies; status codes, headers, HEAD, content-length;
-  incremental response delivery (time-to-first-byte vs total); handler errors before and
-  during streaming; client disconnects mid-upload and mid-download; worker recovery;
-  parallel and multiplexed load; unread bodies on keep-alive; body size limits; and RSS
-  staying flat while 400MB streams through. Each test class starts its own server on a free
-  port and fails if the server died.
-- **App** (`test/integration/test_app.py`): every endpoint over h1/h2/h3, AOT and JIT.
+- **Integration** (`test/integration/*_test.clj`, Babashka `clojure.test` driving `curl`
+  and `h2o-httpclient`): the Ring request map on every protocol; exact, binary (NUL
+  bytes), large, chunked and streamed request bodies; status codes, headers, HEAD,
+  content-length; incremental response delivery (time-to-first-byte vs total); handler
+  errors before and during streaming; client disconnects mid-upload and mid-download;
+  worker recovery; parallel and multiplexed load; unread bodies on keep-alive; body size
+  limits; and RSS staying flat while 400MB streams through. Each namespace starts its own
+  server on a free port, and every test fails if the server died.
+- **App** (`test/integration/app_test.clj`): every endpoint over h1/h2/h3, as the release
+  binary and under `lein run`.
 
-curl in Ubuntu has no HTTP/3, so h3 tests use h2o's own `h2o-httpclient -3`.
+curl in Ubuntu has no HTTP/3, so h3 tests use h2o's own `h2o-httpclient`, which
+`jank-build.bb` builds alongside h2o.
 
 ## Layout
 
@@ -60,7 +90,8 @@ curl in Ubuntu has no HTTP/3, so h3 tests use h2o's own `h2o-httpclient -3`.
 - `native/brrrr.{h,c}` – small C facade over libh2o: TLS/TCP listener (h1+h2, OpenSSL) and
   QUIC/UDP listener (h3, quicly+picotls on OpenSSL 3.0 primitives) on the same port, a
   worker thread pool, and per-request streaming with backpressure (see below).
-- `test/` – unit tests, the echo test server, and the Python integration suites.
+- `project.clj`, `jank-build.bb`, `bb.edn` – lein-jank project, native build script, tasks.
+- `test/` – unit tests (jank), the echo test server (jank), integration suites (bb).
 - `vendor/h2o` – h2o submodule (master), built as a static `libh2o-evloop` with mruby,
   brotli, zstd, io_uring etc. switched off.
 
@@ -122,10 +153,9 @@ Until jank has protocols and streams:
 - Functions take at most 10 fixed parameters.
 - `(thrown? :default ...)` works in clojure.test; `thrown-with-msg?` crashes (see the nil-binding
   `catch :default` bug above).
-- `jank compile` loads previously cached module objects into its JIT, which then has to link
-  any static archives they reference. h2o's TLS relocations can't be JIT-linked, so each AOT
-  build uses a fresh `--build-dir`. For the same reason, `cpp/raw` code must not define
-  namespace-scope objects with constructors.
+- jank's JIT can't link TLS relocations (local-dynamic, initial-exec) from static archives,
+  and `jank compile` loads previously cached module objects into that JIT. See "How it
+  builds" for how this project copes.
 
 ## h2o gotchas found so far
 

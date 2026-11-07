@@ -1,0 +1,62 @@
+{:paths ["test"]
+ :tasks
+ {:requires ([babashka.fs :as fs])
+
+  submodules
+  {:doc  "Fetch vendor/h2o if needed (jank-build.bb runs sandboxed, without network)"
+   :task (when-not (fs/exists? "vendor/h2o/CMakeLists.txt")
+           (shell "git submodule update --init vendor/h2o"))}
+
+  cert
+  {:doc  "Self-signed dev certificate in certs/"
+   :task (when-not (fs/exists? "certs/cert.pem")
+           (fs/create-dirs "certs")
+           (shell "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365"
+                  "-subj /CN=localhost -addext subjectAltName=DNS:localhost,IP:127.0.0.1"
+                  "-keyout certs/key.pem -out certs/cert.pem"))}
+
+  run
+  {:doc     "Run the app under the JIT: bb run [port]"
+   :override-builtin true
+   :depends [submodules cert]
+   :task    (apply shell "lein run --" *command-line-args*)}
+
+  build
+  {:doc     "Release binary at target/release/go-brrrr (statically linked)"
+   :depends [submodules]
+   ;; jank's compile-time JIT loads cached module objects, which then pull h2o's
+   ;; static archive into the JIT, which cannot link its TLS relocations; so the
+   ;; release build starts from an empty module cache. The native build output
+   ;; lives elsewhere in _cache and is kept.
+   :task    (do (fs/delete-tree "target/release/_cache/go-brrrr")
+                (shell "lein with-profile +release compile"))}
+
+  build:echo
+  {:doc     "Echo test server at target/debug/echo-server (for the adapter tests)"
+   :depends [submodules]
+   :task    (shell "lein with-profile +test compile -m server.echo -n echo-server")}
+
+  test:unit
+  {:doc     "jank unit tests (ported ring tests and adapter helpers): lein test"
+   :depends [submodules]
+   :task    (apply shell "lein test" *command-line-args*)}
+
+  test:integration
+  {:doc      "Adapter integration tests over h1/h2/h3: bb test:integration [ns ...]"
+   :depends  [build:echo cert]
+   :requires ([integration.runner :as runner])
+   :task     (runner/run! runner/adapter-nses *command-line-args*)}
+
+  test:app
+  {:doc      "The app's endpoints, as the release binary and under the JIT"
+   :depends  [build cert]
+   :requires ([integration.runner :as runner])
+   :task     (runner/run! runner/app-nses *command-line-args*)}
+
+  test
+  {:doc     "All tests"
+   :depends [test:unit test:integration test:app]}
+
+  clean
+  {:doc  "Remove build output (keeps certs/)"
+   :task (fs/delete-tree "target")}}}
