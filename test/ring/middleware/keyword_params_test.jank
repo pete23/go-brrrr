@@ -1,0 +1,57 @@
+;; Ported from ring-core's test/ring/middleware/test/keyword_params.clj (MIT).
+;; Non-ASCII keys are not keywordized (see the note in keyword_params.jank), so the
+;; upstream cases for them are inverted.
+(ns ring.middleware.keyword-params-test
+  (:require [clojure.test :refer [deftest is testing are]]
+            [ring.middleware.keyword-params :refer :all]
+            [ring.util.codec :refer [percent-decode]]))
+
+(def wrapped-echo         (wrap-keyword-params identity))
+(def wrapped-echo-with-ns (wrap-keyword-params identity {:parse-namespaces? true}))
+
+(def foo-accented (percent-decode "f%C3%B2%C3%B6"))
+
+(deftest test-wrap-keyword-params
+  (testing "plain keywords"
+    (are [in out] (= out (:params (wrapped-echo {:params in})))
+      {"foo" "bar" "biz" "bat"}
+      {:foo "bar" :biz "bat"}
+      {"foo" "bar" "biz" [{"bat" "one"} {"bat" "two"}]}
+      {:foo "bar" :biz [{:bat "one"}  {:bat "two"}]}
+      {"foo" 1}
+      {:foo 1}
+      {"foo" 1 "1bar" 2 "baz*" 3 "quz-buz" 4 "biz.bang" 5}
+      {:foo 1 "1bar" 2 :baz* 3 :quz-buz 4 "biz.bang" 5}
+      {:foo "bar"}
+      {:foo "bar"}
+      {"foo" {:bar "baz"}}
+      {:foo {:bar "baz"}}
+      {"ns/foo" "bar"}
+      {"ns/foo" "bar"}
+      {"" "empty"}
+      {"" "empty"}
+      {"p{L}" "literal"}
+      {"p{L}" "literal"}))
+
+  (testing "non-ASCII keys stay strings (jank deviation)"
+    (is (= {foo-accented "bar"} (:params (wrapped-echo {:params {foo-accented "bar"}})))))
+
+  (testing "namespaced keywords"
+    (are [in out] (= out (:params (wrapped-echo-with-ns {:params in})))
+      {"ns/foo" "bar" "ns/wtf/foo" "baz" "foo/1" "fizz" "foo/bar1" "buzz"}
+      {:ns/foo "bar" "ns/wtf/foo" "baz" "foo/1" "fizz" :foo/bar1 "buzz"}
+      {"dotted.ns/foo" "bar" "dotted.ns/1" "baz" "dotted.ns/bar1" "buzz"}
+      {:dotted.ns/foo "bar" "dotted.ns/1" "baz" :dotted.ns/bar1 "buzz"}
+      {"foo" "bar"}
+      {:foo "bar"})))
+
+(deftest wrap-keyword-params-cps-test
+  (let [handler   (wrap-keyword-params (fn [req respond _] (respond (:params req))))
+        response  (atom nil)
+        exception (atom nil)]
+    (handler {:params {"foo" "bar" :baz "quz"}} #(reset! response %) #(reset! exception %))
+    (is (= {:foo "bar" :baz "quz"} @response))
+    (is (nil? @exception))))
+
+(deftest keyword-params-request-test
+  (is (fn? keyword-params-request)))

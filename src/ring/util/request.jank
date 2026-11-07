@@ -1,5 +1,7 @@
 ;; Ported from ring-core 1.15.6 (MIT, see src/ring/LICENSE) for jank.
-;; Differences: body-string only handles string, seq and nil bodies.
+;; Differences: body-string handles string, seq, nil and reader-fn bodies (the
+;; InputStream stand-in used by ring.adapter.h2o: each call returns the next chunk,
+;; nil at the end).
 (ns ring.util.request
   "Functions for augmenting and pulling information from request maps."
   (:require [clojure.string :as str]
@@ -48,6 +50,7 @@
       (nil? body)    nil
       (string? body) body
       (seq? body)    (apply str body)
+      (fn? body)     (apply str (take-while some? (repeatedly body)))
       :else (throw (ex-info "Unsupported request body type" {:body body})))))
 
 (defn path-info

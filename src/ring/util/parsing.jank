@@ -1,6 +1,8 @@
 ;; Ported from ring-core 1.15.6 (MIT, see src/ring/LICENSE) for jank.
 ;; Differences: jank's regex engine has no inline flags, so (?i:charset) is
-;; spelled out as a character-class pattern.
+;; spelled out as a character-class pattern; and jank returns "" rather than nil
+;; for an unmatched group, so the token/quoted alternatives are told apart by
+;; whether the (always non-empty) token group matched.
 (ns ring.util.parsing
   "Regular expressions for parsing HTTP.
 
@@ -25,5 +27,5 @@
 (defn find-content-type-charset
   "Return the charset of a given a content-type string."
   [s]
-  (when-let [m (re-find re-charset s)]
-    (or (m 1) (m 2))))
+  (when-let [[_ token quoted] (re-find re-charset s)]
+    (if (seq token) token quoted)))

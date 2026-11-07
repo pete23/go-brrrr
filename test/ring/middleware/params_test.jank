@@ -1,0 +1,96 @@
+;; Ported from ring-core's test/ring/middleware/test/params.clj (MIT).
+;; InputStream bodies become string, seq and reader-fn bodies; the UTF-16 case is
+;; replaced by a test that only UTF-8 is decoded.
+(ns ring.middleware.params-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [ring.middleware.params :refer :all]))
+
+(def wrapped-echo (wrap-params identity))
+
+(def form-headers {"content-type" "application/x-www-form-urlencoded"})
+
+(defn- reader-of [& chunks]
+  (let [remaining (atom chunks)]
+    (fn [] (let [[c & more] @remaining] (reset! remaining more) c))))
+
+(deftest wrap-params-query-params-only
+  (let [req  {:query-string "foo=bar&biz=bat%25"}
+        resp (wrapped-echo req)]
+    (is (= {"foo" "bar" "biz" "bat%"} (:query-params resp)))
+    (is (empty? (:form-params resp)))
+    (is (= {"foo" "bar" "biz" "bat%"} (:params resp)))))
+
+(deftest wrap-params-partial-query-params
+  (let [req  {:query-string "foo"}
+        resp (wrapped-echo req)]
+    (is (= {"foo" ""} (:query-params resp)))))
+
+(deftest wrap-params-query-and-form-params
+  (doseq [body ["biz=bat%25" (list "biz=" "bat%25") (reader-of "bi" "z=bat" "%25")]]
+    (let [req  {:query-string "foo=bar"
+                :headers      form-headers
+                :body         body}
+          resp (wrapped-echo req)]
+      (is (= {"foo" "bar"}  (:query-params resp)))
+      (is (= {"biz" "bat%"} (:form-params resp)))
+      (is (= {"foo" "bar" "biz" "bat%"} (:params resp))))))
+
+(deftest wrap-params-form-params-override-order
+  (let [resp (wrapped-echo {:query-string "a=q"
+                            :headers      form-headers
+                            :body         "a=f&b=f"})]
+    (is (= {"a" "q"} (:query-params resp)))
+    (is (= {"a" "f" "b" "f"} (:form-params resp)))
+    (is (= {"a" "q" "b" "f"} (:params resp)) "query params are merged last")))
+
+(deftest wrap-params-not-form-encoded
+  (let [req  {:headers {"content-type" "application/json"}
+              :body    "{foo: \"bar\"}"}
+        resp (wrapped-echo req)]
+    (is (empty? (:form-params resp)))
+    (is (empty? (:params resp)))
+    (is (= "{foo: \"bar\"}" (:body resp)) "body is left unread")))
+
+(deftest wrap-params-always-assocs-maps
+  (let [req  {:query-string ""
+              :headers      form-headers
+              :body         ""}
+        resp (wrapped-echo req)]
+    (is (= {} (:query-params resp)))
+    (is (= {} (:form-params resp)))
+    (is (= {} (:params resp)))))
+
+(deftest wrap-params-no-body-or-query
+  (let [resp (wrapped-echo {:headers form-headers})]
+    (is (= {} (:query-params resp)))
+    (is (= {} (:form-params resp)))
+    (is (= {} (:params resp)))))
+
+(deftest wrap-params-existing-params-kept
+  (let [resp (wrapped-echo {:query-string "a=1" :params {"z" "0"}})]
+    (is (= {"z" "0" "a" "1"} (:params resp)))))
+
+(deftest wrap-params-encoding-is-utf8-only
+  (let [req  {:headers {"content-type" "application/x-www-form-urlencoded;charset=UTF-16"}
+              :body    "hello=world"}
+        resp (wrapped-echo req)]
+    (is (= (:params resp) {"hello" "world"}) "charset is ignored; bytes are decoded as UTF-8")))
+
+(deftest wrap-params-cps-test
+  (let [handler   (wrap-params (fn [req respond _] (respond req)))
+        request   {:query-string "foo=bar"
+                   :headers      form-headers
+                   :body         "biz=bat%25"}
+        response  (atom nil)
+        exception (atom nil)]
+    (handler request #(reset! response %) #(reset! exception %))
+    (is (= {"foo" "bar"}  (:query-params @response)))
+    (is (= {"biz" "bat%"} (:form-params @response)))
+    (is (= {"foo" "bar" "biz" "bat%"} (:params @response)))
+    (is (nil? @exception))))
+
+(deftest params-request-test
+  (is (fn? params-request)))
+
+(deftest assoc-form-params-test
+  (is (fn? assoc-form-params)))

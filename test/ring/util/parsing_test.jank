@@ -1,0 +1,21 @@
+;; Not in upstream ring; covers the charset regex rewritten for jank's regex engine.
+(ns ring.util.parsing-test
+  (:require [clojure.test :refer [deftest is are]]
+            [ring.util.parsing :refer [find-content-type-charset]]))
+
+(deftest test-find-content-type-charset
+  (are [ct cs] (= (find-content-type-charset ct) cs)
+    "text/plain; charset=UTF-8"            "UTF-8"
+    "text/plain;charset=UTF-8"             "UTF-8"
+    "text/plain; CHARSET=utf-8"            "utf-8"
+    "text/plain; Charset=\"latin1\""       "latin1"
+    "text/plain; charset=UTF-8; format=x"  "UTF-8"
+    "text/plain; format=x; charset=UTF-8"  "UTF-8"
+    "text/plain; charset=UTF-8 "           "UTF-8"
+    "text/plain"                           nil
+    "text/plain; charsetx=UTF-8"           nil
+    "text/plain; xcharset=UTF-8"           nil))
+
+(deftest test-quoted-charset-edge-cases
+  (is (= "" (find-content-type-charset "text/plain; charset=\"\"")) "an empty quoted charset is empty, not nil")
+  (is (= "a b" (find-content-type-charset "text/plain; charset=\"a b\""))))
