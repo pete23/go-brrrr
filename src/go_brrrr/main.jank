@@ -1,0 +1,7 @@
+(ns go-brrrr.main)
+
+(cpp/raw "#include <cstdlib>")
+
+(defn -main [& _args]
+  ;; jank discards -main's return value, so exit explicitly via C++ interop.
+  (cpp/std.exit (+ 20 3)))
