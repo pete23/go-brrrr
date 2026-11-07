@@ -1,0 +1,176 @@
+(ns ring.adapter.h2o
+  "Ring adapter for h2o (HTTP/1.1, HTTP/2 and HTTP/3 over TLS).
+
+  Follows the Ring spec for synchronous handlers, with these deviations until
+  jank has protocols and streams:
+
+  * The request :body is a string holding the whole (buffered) body, or nil.
+  * The response :body may be nil, a string, or a seq of strings.
+  * Only one server per process; run-h2o blocks the calling thread.
+  * Asynchronous (3-arity) handlers are not supported."
+  (:require [clojure.string :as str]))
+
+;; Bridges brrrr's C callback to -dispatch below. Requests are marshalled into
+;; plain strings/ints, the Ring maps are built in jank, and -dispatch returns
+;; [status flat-headers body-string] for the bridge to send.
+(cpp/raw "#include <cstdio>
+#include <string>
+#include <vector>
+#include \"brrrr.h\"
+
+namespace ring_h2o
+{
+  using namespace jank::runtime;
+
+  inline jank_object_ref str(brrrr_str_t const s)
+  {
+    if(s.base == nullptr)
+    { return jank_const_nil(); }
+    return convert<std::string>::into_object(std::string{ s.base, s.len }).erase().raw();
+  }
+
+  inline void dispatch(brrrr_request_t * const req)
+  {
+    static jank_object_ref const dispatch_var{ jank_var_intern_c(\"ring.adapter.h2o\", \"-dispatch\") };
+    try
+    {
+      std::vector<std::string> in_headers;
+      in_headers.reserve(req->num_headers * 2);
+      for(size_t i{}; i < req->num_headers; ++i)
+      {
+        in_headers.emplace_back(req->headers[i].name.base, req->headers[i].name.len);
+        in_headers.emplace_back(req->headers[i].value.base, req->headers[i].value.len);
+      }
+
+      object_ref const result{ reinterpret_cast<object *>(jank_call10(
+        jank_deref(dispatch_var),
+        str(req->method),
+        str(req->path),
+        str(req->query),
+        str(req->scheme),
+        str(req->authority),
+        jank_integer_create(req->http_version),
+        str(req->remote_addr),
+        jank_integer_create(req->server_port),
+        convert<std::vector<std::string>>::into_object(in_headers).erase().raw(),
+        str(req->body))) };
+
+      auto const v{ try_object<obj::persistent_vector>(result) };
+      auto const status{ convert<int>::from_object(v->data[0]) };
+      auto const out_headers{ convert<std::vector<std::string>>::from_object(v->data[1]) };
+      auto const body{ convert<std::string>::from_object(v->data[2]) };
+
+      std::vector<brrrr_header_t> hs;
+      hs.reserve(out_headers.size() / 2);
+      for(size_t i{}; i + 1 < out_headers.size(); i += 2)
+      {
+        hs.push_back({ { out_headers[i].data(), out_headers[i].size() },
+                       { out_headers[i + 1].data(), out_headers[i + 1].size() } });
+      }
+      brrrr_respond(req, status, hs.data(), hs.size(), brrrr_str_t{ body.data(), body.size() });
+    }
+    catch(...)
+    {
+      /* brrrr sends a 500 when no response was produced. */
+      std::fputs(\"ring.adapter.h2o: dispatch failed\\n\", stderr);
+    }
+  }
+
+  inline int serve(char const *host, int port, char const *cert, char const *key)
+  {
+    brrrr_config_t const config{ host, static_cast<uint16_t>(port), cert, key, dispatch };
+    return brrrr_serve(&config);
+  }
+}")
+
+(defonce ^:private current-handler (atom nil))
+
+(def ^:private protocols
+  {256 "HTTP/1.0"
+   257 "HTTP/1.1"
+   512 "HTTP/2.0"
+   768 "HTTP/3.0"})
+
+(defn- header-map
+  "Flat [name value ...] into a Ring header map; repeated headers are joined with
+  commas, as other Ring adapters do."
+  [flat]
+  (reduce (fn [m [k v]]
+            (assoc m k (if-let [old (get m k)] (str old "," v) v)))
+          {}
+          (partition 2 flat)))
+
+(defn- server-name [authority]
+  (cond
+    (str/blank? authority)         nil
+    (str/starts-with? authority "[") (subs authority 0 (inc (or (str/index-of authority "]") (dec (count authority)))))
+    :else                          (first (str/split authority #":"))))
+
+(defn- build-request
+  [method uri query scheme authority version remote-addr server-port headers body]
+  (cond-> {:server-port    server-port
+           :server-name    (server-name authority)
+           :remote-addr    remote-addr
+           :uri            uri
+           :scheme         (keyword scheme)
+           :request-method (keyword (str/lower-case method))
+           :protocol       (protocols version (str "HTTP/" version))
+           :headers        (header-map headers)}
+    query (assoc :query-string query)
+    body  (assoc :body body)))
+
+(defn- flat-headers [headers]
+  (vec (mapcat (fn [[k v]]
+                 (let [k (str/lower-case (name k))]
+                   (if (sequential? v)
+                     (mapcat (fn [x] [k (str x)]) v)
+                     [k (str v)])))
+               headers)))
+
+(defn- body-string [body]
+  (cond
+    (nil? body)    ""
+    (string? body) body
+    (seqable? body) (apply str body)
+    :else (throw (ex-info "Unsupported response body type" {:body body}))))
+
+(defn- error-response [description]
+  (binding [*out* *err*]
+    (println "ring.adapter.h2o: handler threw:" description))
+  [500 ["content-type" "text/plain"] "Internal Server Error"])
+
+(defn -dispatch
+  "Called by the C++ bridge for every request. Not part of the public API."
+  [method uri query scheme authority version remote-addr server-port headers body]
+  (try
+    (let [request  (build-request method uri query scheme authority version
+                                  remote-addr server-port headers body)
+          response (@current-handler request)]
+      (if (nil? response)
+        [404 ["content-type" "text/plain"] "Not Found"]
+        [(:status response 200)
+         (flat-headers (:headers response))
+         (body-string (:body response))]))
+    ;; jank's (catch :default e) binds e to nil, so catch the two concrete kinds.
+    (catch cpp/jank.runtime.object_ref e
+      (error-response (pr-str e)))
+    (catch cpp/std.exception e
+      (error-response (.what e)))))
+
+(defn run-h2o
+  "Start h2o serving the Ring handler over HTTPS (h1, h2) and HTTP/3 on the same
+  port, blocking the calling thread. Options:
+
+  :host      - IPv4 address to bind (default \"0.0.0.0\")
+  :port      - TCP and UDP port (default 8443)
+  :cert-file - PEM certificate chain (required)
+  :key-file  - PEM private key (required)
+
+  Pass a var (#'handler) to pick up redefinitions without restarting."
+  [handler {:keys [host port cert-file key-file]
+            :or   {host "0.0.0.0" port 8443}}]
+  (when-not (and cert-file key-file)
+    (throw (ex-info "run-h2o needs :cert-file and :key-file" {})))
+  (reset! current-handler handler)
+  (let [rc (cpp/ring_h2o.serve host port cert-file key-file)]
+    (throw (ex-info "h2o failed to start" {:code rc}))))

@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include <netdb.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <openssl/err.h>
@@ -16,6 +17,7 @@
 
 static struct {
     brrrr_handler_fn handler;
+    uint16_t port;
     h2o_globalconf_t globalconf;
     h2o_context_t ctx;
     h2o_accept_ctx_t accept_ctx;
@@ -31,23 +33,94 @@ static struct {
 
 /* ---- request handling ---- */
 
+typedef struct {
+    brrrr_request_t pub;
+    h2o_req_t *req;
+    int responded;
+} brrrr_req_impl_t;
+
+static brrrr_str_t to_str(h2o_iovec_t v)
+{
+    return (brrrr_str_t){v.base, v.len};
+}
+
+void brrrr_respond(brrrr_request_t *_req, int status, const brrrr_header_t *headers, size_t num_headers, brrrr_str_t body)
+{
+    brrrr_req_impl_t *impl = (brrrr_req_impl_t *)_req;
+    h2o_req_t *req = impl->req;
+    if (impl->responded)
+        return;
+    impl->responded = 1;
+
+    req->res.status = status;
+    req->res.reason = status == 200 ? "OK" : "";
+    for (size_t i = 0; i != num_headers; ++i) {
+        const brrrr_header_t *h = headers + i;
+        /* h2o computes framing itself */
+        if (h2o_memis(h->name.base, h->name.len, H2O_STRLIT("content-length")) ||
+            h2o_memis(h->name.base, h->name.len, H2O_STRLIT("transfer-encoding")) ||
+            h2o_memis(h->name.base, h->name.len, H2O_STRLIT("connection")))
+            continue;
+        h2o_iovec_t name = h2o_strdup(&req->pool, h->name.base, h->name.len);
+        h2o_iovec_t value = h2o_strdup(&req->pool, h->value.base, h->value.len);
+        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 1, NULL, value.base, value.len);
+    }
+    /* advertise HTTP/3 to TCP clients */
+    if (req->version < 0x300)
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALT_SVC, NULL, g.alt_svc.base, g.alt_svc.len);
+    h2o_iovec_t b = h2o_strdup(&req->pool, body.base != NULL ? body.base : "", body.base != NULL ? body.len : 0);
+    req->res.content_length = b.len;
+    h2o_send_inline(req, b.base, b.len);
+}
+
 static int on_req(h2o_handler_t *self, h2o_req_t *req)
 {
     (void)self;
-    brrrr_request_t breq = {req->method.base, req->method.len, req->path_normalized.base, req->path_normalized.len};
-    brrrr_response_t bres = {404, "text/plain", "not found", 9};
-    g.handler(&breq, &bres);
+    brrrr_req_impl_t impl = {.req = req};
+    brrrr_request_t *r = &impl.pub;
 
-    req->res.status = bres.status;
-    req->res.reason = bres.status == 200 ? "OK" : "";
-    const char *ct = bres.content_type != NULL ? bres.content_type : "text/plain";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, ct, strlen(ct));
-    /* advertise HTTP/3 to TCP clients so browsers / curl --alt-svc can upgrade */
-    if (req->version < 0x300)
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALT_SVC, NULL, g.alt_svc.base, g.alt_svc.len);
-    h2o_iovec_t body = h2o_strdup(&req->pool, bres.body != NULL ? bres.body : "", bres.body != NULL ? bres.body_len : 0);
-    req->res.content_length = body.len;
-    h2o_send_inline(req, body.base, body.len);
+    r->method = to_str(req->method);
+    if (req->query_at != SIZE_MAX) {
+        r->path = (brrrr_str_t){req->path.base, req->query_at};
+        r->query = (brrrr_str_t){req->path.base + req->query_at + 1, req->path.len - req->query_at - 1};
+    } else {
+        r->path = to_str(req->path);
+    }
+    r->scheme = (brrrr_str_t){req->scheme->name.base, req->scheme->name.len};
+    r->authority = to_str(req->authority);
+    r->http_version = req->version;
+    r->server_port = g.port;
+
+    struct sockaddr_storage ss;
+    socklen_t sslen = req->conn->callbacks->get_peername(req->conn, (struct sockaddr *)&ss);
+    char *addr = h2o_mem_alloc_pool(&req->pool, char, NI_MAXHOST);
+    size_t addrlen = sslen != 0 ? h2o_socket_getnumerichost((struct sockaddr *)&ss, sslen, addr) : SIZE_MAX;
+    r->remote_addr = addrlen != SIZE_MAX ? (brrrr_str_t){addr, addrlen} : (brrrr_str_t){"", 0};
+
+    /* h2/h3 carry the host in :authority, not in a header; Ring wants a host header either way */
+    int has_host = h2o_find_header(&req->headers, H2O_TOKEN_HOST, -1) != -1;
+    /* h2o moves content-length out of the header list; Ring expects it as a header */
+    int has_length = req->content_length != SIZE_MAX;
+    size_t n = req->headers.size + !has_host + has_length;
+    brrrr_header_t *hs = h2o_mem_alloc_pool(&req->pool, brrrr_header_t, n == 0 ? 1 : n);
+    size_t j = 0;
+    for (size_t i = 0; i != req->headers.size; ++i)
+        hs[j++] = (brrrr_header_t){to_str(*req->headers.entries[i].name), to_str(req->headers.entries[i].value)};
+    if (!has_host)
+        hs[j++] = (brrrr_header_t){{"host", 4}, r->authority};
+    if (has_length) {
+        char *len = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+        size_t len_len = sprintf(len, "%zu", req->content_length);
+        hs[j++] = (brrrr_header_t){{"content-length", 14}, {len, len_len}};
+    }
+    r->headers = hs;
+    r->num_headers = j;
+    r->body = to_str(req->entity);
+
+    g.handler(r);
+
+    if (!impl.responded)
+        brrrr_respond(r, 500, (brrrr_header_t[]){{{"content-type", 12}, {"text/plain", 10}}}, 1, (brrrr_str_t){"internal error", 14});
     return 0;
 }
 
@@ -184,6 +257,7 @@ static int setup_udp(const struct sockaddr_in *addr, const brrrr_config_t *c)
 int brrrr_serve(const brrrr_config_t *c)
 {
     g.handler = c->handler;
+    g.port = c->port;
 
     h2o_config_init(&g.globalconf);
     h2o_hostconf_t *hostconf = h2o_config_register_host(&g.globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);

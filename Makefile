@@ -50,7 +50,8 @@ run: build/libbrrrr.so certs/cert.pem
 
 # AOT: native binary at $(BIN); links shim + h2o statically, OpenSSL/zlib dynamically.
 build: $(BIN)
-$(BIN): src/go_brrrr/main.jank build/libbrrrr.a $(H2O_LIB)
+SOURCES := $(shell find src -name '*.jank')
+$(BIN): $(SOURCES) build/libbrrrr.a $(H2O_LIB)
 	$(JANK) $(JANKFLAGS) -O2 --name go-brrrr \
 	  -l $(CURDIR)/build/libbrrrr.a -l $(CURDIR)/$(H2O_LIB) $(SYS_LIBS) compile $(MAIN)
 

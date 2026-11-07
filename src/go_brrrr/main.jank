@@ -1,39 +1,32 @@
-(ns go-brrrr.main)
+(ns go-brrrr.main
+  (:require [ring.adapter.h2o :refer [run-h2o]]
+            [ring.middleware.head :refer [wrap-head]]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.params :refer [wrap-params]]
+            [ring.util.response :as resp]))
 
-(cpp/raw "#include <string>
-#include \"brrrr.h\"
+(defn- text [body]
+  (-> (resp/response body)
+      (resp/content-type "text/plain")))
 
-/* Bridges h2o's C callback to the jank var go-brrrr.main/handle. The body is
-   kept alive in a static until brrrr copies it into the request pool. */
-static void go_brrrr_dispatch(brrrr_request_t const *req, brrrr_response_t *res)
-{
-  using namespace jank::runtime;
-  static std::string body;
-  std::string const method{ req->method, req->method_len }, path{ req->path, req->path_len };
-  object_ref const result{ reinterpret_cast<object *>(
-    jank_call2(jank_deref(jank_var_intern_c(\"go-brrrr.main\", \"handle\")),
-               jank_string_create(method.c_str()),
-               jank_string_create(path.c_str()))) };
-  if(result.is_nil())
-  { return; }
-  body = convert<std::string>::from_object(result);
-  res->status = 200;
-  res->content_type = \"text/plain\";
-  res->body = body.data();
-  res->body_len = body.size();
-}
+(defn handler [{:keys [request-method uri params]}]
+  (case [request-method uri]
+    [:get "/"]     (text (str (+ 20 3)))
+    ([:get "/add"]
+     [:post "/add"]) (let [a (some-> params :a parse-long)
+                           b (some-> params :b parse-long)]
+                       (if (and a b)
+                         (text (str (+ a b)))
+                         (resp/bad-request "need integer a and b")))
+    (resp/not-found "not found")))
 
-static int go_brrrr_serve(char const *host, int port, char const *cert, char const *key)
-{
-  brrrr_config_t config{ host, static_cast<uint16_t>(port), cert, key, go_brrrr_dispatch };
-  return brrrr_serve(&config);
-}")
-
-(defn handle
-  "Returns a text/plain body, or nil for 404."
-  [method path]
-  (when (and (= method "GET") (= path "/"))
-    (str (+ 20 3))))
+(def app
+  (-> #'handler
+      wrap-keyword-params
+      wrap-params
+      wrap-head))
 
 (defn -main [& _args]
-  (cpp/std.exit (cpp/go_brrrr_serve "0.0.0.0" 8443 "certs/cert.pem" "certs/key.pem")))
+  (run-h2o #'app {:port 8443
+                  :cert-file "certs/cert.pem"
+                  :key-file "certs/key.pem"}))
