@@ -6,24 +6,35 @@ A [jank](https://jank-lang.org) Ring app served over HTTP/1.1, HTTP/2 and HTTP/3
 - `GET /` → `23` (`text/plain`)
 - `GET|POST /add` with `a` and `b` (query string or form) → their sum
 
-## Install jank (Ubuntu 24.04+)
+## Setup
+
+### macOS (Apple silicon)
+
+```bash
+brew install jank-lang/jank/jank leiningen borkdude/brew/babashka cmake ninja openssl@3 nghttp2
+xcode-select --install   # if you don't have the command line tools
+```
+
+`jank-build.bb` finds Homebrew's keg-only `openssl@3` itself; set `OPENSSL_ROOT_DIR` to use
+another. The build sandbox on macOS is `sandbox-exec`, which ships with the OS. jank's
+Homebrew package is aarch64 only; on Intel Macs, jank has to be built from source.
+
+### Ubuntu 24.04+
 
 ```bash
 curl -s https://ppa.jank-lang.org/KEY.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/jank.gpg >/dev/null
 echo "deb [signed-by=/etc/apt/trusted.gpg.d/jank.gpg] https://ppa.jank-lang.org $(lsb_release -cs) main" \
   | sudo tee /etc/apt/sources.list.d/jank.list >/dev/null
-sudo apt update && sudo apt install -y jank
-```
-
-Plus [Leiningen](https://leiningen.org/) (jank's project tool, via the
-[lein-jank](https://book.jank-lang.org/getting-started/03-hello-leiningen.html) plugin),
-[Babashka](https://babashka.org) (tasks, jank build scripts, integration tests) and
-bubblewrap (jank-build's sandbox), and the native toolchain:
-
-```bash
-sudo apt install -y leiningen bubblewrap clang cmake ninja-build libssl-dev zlib1g-dev curl
+sudo apt update && sudo apt install -y jank leiningen bubblewrap clang cmake ninja-build \
+  libssl-dev zlib1g-dev curl nghttp2-client
 bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
 ```
+
+That's [Leiningen](https://leiningen.org/) (jank's project tool, via the
+[lein-jank](https://book.jank-lang.org/getting-started/03-hello-leiningen.html) plugin),
+[Babashka](https://babashka.org) (tasks, the native build script, integration tests and the
+load test), bubblewrap (jank-build's sandbox on Linux) and `h2load` (from nghttp2) for the
+load test.
 
 ## Use
 
@@ -34,6 +45,7 @@ bb test                # everything below
 bb test:unit           # `lein test`: ported ring tests plus the adapter's pure helpers
 bb test:integration    # the adapter against test/server/echo.jank, over h1, h2 and h3
 bb test:app            # the app's endpoints, as the release binary and under the JIT
+bb bench               # load test: 60s at 100 req/s per protocol (see below)
 bb tasks               # the rest
 ```
 
@@ -76,6 +88,28 @@ initial-exec or local-dynamic support), so linking depends on the profile:
 
 curl in Ubuntu has no HTTP/3, so h3 tests use h2o's own `h2o-httpclient`, which
 `jank-build.bb` builds alongside h2o.
+
+## Load test
+
+`bb bench` starts the release binary and drives it with
+[h2load](https://nghttp2.org/documentation/h2load-howto.html) at a fixed rate, one protocol
+at a time:
+
+```bash
+bb bench                                         # 60s at 100 req/s total, 10 clients, h1 + h2 (+ h3)
+bb bench --rate 5000 --clients 50 --duration 30  # each client sends rate/clients req/s
+bb bench --protocols h2 --path '/add?a=1&b=2'
+```
+
+It prints achieved req/s and latency (min/mean/max/sd) per protocol and fails if any request
+fails, any response isn't 2xx, the rate falls more than 5% short, or the server dies.
+HTTP/3 runs only if your h2load was built with QUIC support (it probes with one request;
+Ubuntu's isn't). Baseline here (cloud VM, 4 vCPU): 100.00 req/s on h1 and h2, mean latency
+~0.8ms, max ~17ms.
+
+For finding the ceiling rather than holding a rate, drop `--rps` and use h2load directly,
+e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
+`target/release/go-brrrr`.
 
 ## Layout
 

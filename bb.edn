@@ -9,11 +9,18 @@
 
   cert
   {:doc  "Self-signed dev certificate in certs/"
+   ;; Plain ecparam + req with a config file, so this works with LibreSSL (macOS's
+   ;; /usr/bin/openssl) as well as OpenSSL.
    :task (when-not (fs/exists? "certs/cert.pem")
            (fs/create-dirs "certs")
-           (shell "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 365"
-                  "-subj /CN=localhost -addext subjectAltName=DNS:localhost,IP:127.0.0.1"
-                  "-keyout certs/key.pem -out certs/cert.pem"))}
+           (spit "certs/openssl.cnf"
+                 (str "[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN=localhost\n"
+                      "[v3]\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n"
+                      "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature\n"
+                      "extendedKeyUsage=serverAuth\n"))
+           (shell "openssl ecparam -name prime256v1 -genkey -noout -out certs/key.pem")
+           (shell (str "openssl req -new -x509 -days 365 -key certs/key.pem -out certs/cert.pem"
+                       " -config certs/openssl.cnf -extensions v3")))}
 
   run
   {:doc     "Run the app under the JIT: bb run [port]"
@@ -28,8 +35,12 @@
    ;; static archive into the JIT, which cannot link its TLS relocations; so the
    ;; release build starts from an empty module cache. The native build output
    ;; lives elsewhere in _cache and is kept.
-   :task    (do (fs/delete-tree "target/release/_cache/go-brrrr")
-                (shell "lein with-profile +release compile"))}
+   :task    (let [bin "target/release/go-brrrr"
+                  inputs ["src" "native" "vendor/h2o" "project.clj" "jank-build.bb"]]
+              (if (and (fs/exists? bin) (empty? (fs/modified-since bin inputs)))
+                (println bin "is up to date")
+                (do (fs/delete-tree "target/release/_cache/go-brrrr")
+                    (shell "lein with-profile +release compile"))))}
 
   build:echo
   {:doc     "Echo test server at target/debug/echo-server (for the adapter tests)"
@@ -52,6 +63,12 @@
    :depends  [build cert]
    :requires ([integration.runner :as runner])
    :task     (runner/run! runner/app-nses *command-line-args*)}
+
+  bench
+  {:doc      "Fixed-rate load test with h2load: bb bench [--rate 100] [--duration 60] [--protocols h1,h2,h3]"
+   :depends  [build cert]
+   :requires ([bench.load :as load])
+   :task     (apply load/-main *command-line-args*)}
 
   test
   {:doc     "All tests"

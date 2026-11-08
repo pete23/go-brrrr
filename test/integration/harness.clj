@@ -73,12 +73,12 @@
 (defn url [path]
   (str (:base *server*) path))
 
-(defn rss-mb [server]
-  ;; fs/read-all-lines rather than slurp: /proc files report a zero length
-  (let [line (->> (fs/read-all-lines (str "/proc/" (.pid ^Process (:proc (:process server))) "/status"))
-                  (filter #(str/starts-with? % "VmRSS:"))
-                  first)]
-    (/ (parse-long (second (str/split (str/trim line) #"\s+"))) 1024.0)))
+(defn rss-mb
+  "Resident set size of the server process, via ps (Linux and macOS)."
+  [server]
+  (let [pid (.pid ^Process (:proc (:process server)))
+        out (:out (p/shell {:out :string} "ps" "-o" "rss=" "-p" (str pid)))]
+    (/ (parse-long (str/trim out)) 1024.0)))
 
 (defn with-server*
   "Runs `f` with *server* bound to a fresh server started from `argv`."

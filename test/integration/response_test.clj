@@ -1,6 +1,8 @@
 (ns integration.response-test
   "Status codes, headers, content-length, HEAD and Alt-Svc."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [babashka.process]
+            [clojure.string]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [integration.echo :as e]
             [integration.harness :as h]))
 
@@ -75,3 +77,12 @@
   (let [r (h/h3 (h/url "/binary") :method "HEAD")]
     (is (= 200 (:status r)))
     (is (zero? (alength ^bytes (:body r))))))
+
+(deftest alpn-offers-h2-and-http1
+  ;; clients asking for http/1.1 must get it negotiated, not fall back silently
+  (doseq [[offer expected] [["http/1.1" "http/1.1"] ["h2" "h2"] ["h2,http/1.1" "h2"]]]
+    (testing offer
+      (let [{:keys [out]} (babashka.process/shell
+                           {:in "" :out :string :err :string :continue true}
+                           "openssl" "s_client" "-alpn" offer "-connect" (str "127.0.0.1:" (:port h/*server*)))]
+        (is (clojure.string/includes? out (str "ALPN protocol: " expected)) out)))))

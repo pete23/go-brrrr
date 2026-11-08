@@ -516,7 +516,7 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
     int add_host = h2o_find_header(&req->headers, H2O_TOKEN_HOST, -1) == -1;
     int add_length = req->content_length != SIZE_MAX;
     char length_buf[sizeof(H2O_UINT64_LONGEST_STR)];
-    size_t length_len = add_length ? (size_t)sprintf(length_buf, "%zu", req->content_length) : 0;
+    size_t length_len = add_length ? (size_t)snprintf(length_buf, sizeof(length_buf), "%zu", req->content_length) : 0;
 
     struct sockaddr_storage ss;
     socklen_t sslen = req->conn->callbacks->get_peername(req->conn, (struct sockaddr *)&ss);
@@ -621,7 +621,7 @@ static int setup_tcp(const struct sockaddr_in *addr, const brrrr_config_t *c)
         ERR_print_errors_fp(stderr);
         return -1;
     }
-    h2o_ssl_register_alpn_protocols(ssl, h2o_http2_alpn_protocols);
+    h2o_ssl_register_alpn_protocols(ssl, h2o_alpn_protocols); /* h2 first, then http/1.1 */
     g.accept_ctx.ssl_ctx = ssl;
 
     int fd, on = 1;
