@@ -1,7 +1,32 @@
-(ns go-brrrr.main)
+(ns go-brrrr.main
+  (:require [ring.adapter.h2o :refer [run-h2o]]
+            [ring.middleware.head :refer [wrap-head]]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.params :refer [wrap-params]]
+            [ring.util.response :as resp]))
 
-(cpp/raw "#include <cstdlib>")
+(defn- text [body]
+  (-> (resp/response body)
+      (resp/content-type "text/plain")))
 
-(defn -main [& _args]
-  ;; jank discards -main's return value, so exit explicitly via C++ interop.
-  (cpp/std.exit (+ 20 3)))
+(defn handler [{:keys [request-method uri params]}]
+  (case [request-method uri]
+    [:get "/"]     (text (str (+ 20 3)))
+    ([:get "/add"]
+     [:post "/add"]) (let [a (some-> params :a parse-long)
+                           b (some-> params :b parse-long)]
+                       (if (and a b)
+                         (text (str (+ a b)))
+                         (resp/bad-request "need integer a and b")))
+    (resp/not-found "not found")))
+
+(def app
+  (-> #'handler
+      wrap-keyword-params
+      wrap-params
+      wrap-head))
+
+(defn -main [& args]
+  (run-h2o #'app {:port (or (some-> (first args) parse-long) 8443)
+                  :cert-file "certs/cert.pem"
+                  :key-file "certs/key.pem"}))

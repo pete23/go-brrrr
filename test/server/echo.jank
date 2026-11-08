@@ -1,0 +1,109 @@
+(ns server.echo
+  "Test server for the adapter's integration tests (test/integration/test_adapter.py)."
+  (:require [clojure.string :as str]
+            [ring.adapter.h2o :refer [run-h2o]]
+            [ring.util.codec :as codec]
+            [ring.util.request :as rq]))
+
+(cpp/raw "#include <unistd.h>")
+
+(defn- sleep-ms [ms]
+  (cpp/usleep (cpp/cast cpp/uint (* 1000 ms))))
+
+(defn- query [req]
+  (if-let [q (:query-string req)] (codec/form-decode-map q) {}))
+
+(defn- qlong [req k default]
+  (or (some-> (get (query req) k) parse-long) default))
+
+(defn- describe
+  "One key=value line per request field and header, in a stable order."
+  [req body]
+  (str/join "\n"
+            (concat
+             (for [k [:request-method :uri :query-string :scheme :protocol
+                      :server-name :server-port :remote-addr]]
+               (str (name k) "=" (get req k)))
+             [(str "has-query=" (contains? req :query-string))
+              (str "has-body=" (some? (:body req)))
+              (str "body-length=" (count body))]
+             (for [[k v] (sort (:headers req))]
+               (str "header." k "=" v))
+             [(str "body=" body)])))
+
+(defn- drain
+  "Reads the body without retaining it; returns [bytes chunks]."
+  [read!]
+  (loop [bytes 0 chunks 0]
+    (if-let [chunk (read!)]
+      (recur (+ bytes (count chunk)) (inc chunks))
+      [bytes chunks])))
+
+(def ^:private hex-digits "0123456789ABCDEF")
+
+(def ^:private all-bytes
+  "Every byte value 0-255, built by percent-decoding (jank's char yields UTF-8)."
+  (codec/percent-decode
+   (apply str (for [i (range 256)]
+                (str "%" (nth hex-digits (quot i 16)) (nth hex-digits (mod i 16)))))))
+
+(defn- text [status body]
+  {:status status :headers {"content-type" "text/plain"} :body body})
+
+(defn handler [req]
+  (case (:uri req)
+    "/echo"     (text 200 (describe req (or (rq/body-string req) "")))
+    ;; Streams the request body straight back out, chunk by chunk.
+    "/mirror"   {:status 200
+                 :headers {"content-type" "application/octet-stream"}
+                 :body (fn [write!]
+                         (when-let [read! (:body req)]
+                           (loop []
+                             (when-let [chunk (read!)]
+                               (write! chunk)
+                               (recur)))))}
+    "/count"    (let [[bytes chunks] (if-let [read! (:body req)] (drain read!) [0 0])]
+                  (text 200 (str bytes " " chunks)))
+    ;; n chunks of `size` bytes, delay ms apart, via a writer fn.
+    "/stream"   (let [n (qlong req "n" 3) size (qlong req "size" 6) delay (qlong req "delay" 0)]
+                  {:status 200
+                   :headers {"content-type" "text/plain"}
+                   :body (fn [write!]
+                           (dotimes [i n]
+                             (when (and (pos? delay) (pos? i)) (sleep-ms delay))
+                             (write! (apply str (repeat size (str (mod i 10)))))))})
+    ;; same, via a lazy seq
+    "/lazy"     (let [n (qlong req "n" 3) size (qlong req "size" 6) delay (qlong req "delay" 0)]
+                  {:status 200
+                   :headers {"content-type" "text/plain"}
+                   :body (map (fn [i]
+                                (when (and (pos? delay) (pos? i)) (sleep-ms delay))
+                                (apply str (repeat size (str (mod i 10)))))
+                              (range n))})
+    "/sleep"    (do (sleep-ms (qlong req "ms" 500)) (text 200 "slept"))
+    "/status"   {:status (qlong req "code" 200)
+                 :headers {"location" "/elsewhere" "x-multi" ["a" "b"] "Content-Length" "999"
+                           "X-Mixed-Case" "kept"}
+                 :body (when-not (= 204 (qlong req "code" 200)) "status body")}
+    "/nil-body" {:status 200 :headers {"content-type" "text/plain"}}
+    "/binary"   (text 200 all-bytes)
+    "/throw"    (throw (ex-info "boom" {}))
+    "/throw-native" (text 200 (subs nil 1))
+    "/bad-body" {:status 200 :body 42}
+    ;; streams a few chunks, then throws: the response must be aborted, not ended cleanly
+    "/throw-mid-stream" {:status 200
+                         :headers {"content-type" "text/plain"}
+                         :body (fn [write!]
+                                 (write! "partial")
+                                 (sleep-ms 50)
+                                 (throw (ex-info "mid-stream boom" {})))}
+    "/nil"      nil
+    (text 404 "not found")))
+
+(defn -main [& args]
+  (let [port (or (some-> (first args) parse-long) 9443)]
+    (run-h2o #'handler {:port port
+                        :threads 4
+                        :max-body-size (* 512 1024 1024)
+                        :cert-file "certs/cert.pem"
+                        :key-file "certs/key.pem"})))

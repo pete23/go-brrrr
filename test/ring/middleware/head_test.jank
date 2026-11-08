@@ -1,0 +1,47 @@
+;; Ported from ring-core's test/ring/middleware/test/head.clj (MIT); promises replaced by atoms.
+(ns ring.middleware.head-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [ring.middleware.head :refer :all]))
+
+(defn- handler
+  ([req]
+   {:status 200
+    :headers {"X-method" (name (:request-method req))}
+    :body "Foobar"})
+  ([req cont raise]
+   (cont
+    {:status 200
+     :headers {"X-method" (name (:request-method req))}
+     :body "Foobar"})))
+
+(deftest test-wrap-head
+  (let [resp ((wrap-head handler) {:request-method :head})]
+    (is (nil? (:body resp)))
+    (is (= "get" (get-in resp [:headers "X-method"]))))
+  (let [resp ((wrap-head handler) {:request-method :post})]
+    (is (= (:body resp) "Foobar"))
+    (is (= "post" (get-in resp [:headers "X-method"])))))
+
+(deftest wrap-head-cps-test
+  (testing "HEAD request"
+    (let [response  (atom nil)
+          exception (atom nil)]
+      ((wrap-head handler) {:request-method :head} #(reset! response %) #(reset! exception %))
+      (is (nil? (:body @response)))
+      (is (= "get" (get-in @response [:headers "X-method"])))
+      (is (nil? @exception))))
+
+  (testing "POST request"
+    (let [response  (atom nil)
+          exception (atom nil)]
+      ((wrap-head handler) {:request-method :post} #(reset! response %) #(reset! exception %))
+      (is (= "Foobar" (:body @response)))
+      (is (= "post" (get-in @response [:headers "X-method"])))
+      (is (nil? @exception)))))
+
+(deftest head-request-test
+  (is (fn? head-request)))
+
+(deftest head-response-test
+  (is (fn? head-response))
+  (is (nil? (head-response nil {:request-method :head}))))

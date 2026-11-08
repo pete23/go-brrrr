@@ -1,0 +1,64 @@
+;; Unit tests for the pure parts of ring.adapter.h2o. The I/O paths are covered by
+;; test/integration/test_adapter.py against a running server.
+(ns ring.adapter.h2o-test
+  (:require [clojure.test :refer [deftest is testing are]]
+            [ring.adapter.h2o]))
+
+(def header-map    @#'ring.adapter.h2o/header-map)
+(def server-name   @#'ring.adapter.h2o/server-name)
+(def flat-headers  @#'ring.adapter.h2o/flat-headers)
+(def build-request @#'ring.adapter.h2o/build-request)
+
+(deftest test-header-map
+  (is (= {} (header-map [])))
+  (is (= {"a" "1" "b" "2"} (header-map ["a" "1" "b" "2"])))
+  (testing "repeated headers are comma-joined in order"
+    (is (= {"x" "1,2,3"} (header-map ["x" "1" "x" "2" "x" "3"])))))
+
+(deftest test-server-name
+  (are [authority name] (= name (server-name authority))
+    "example.com"      "example.com"
+    "example.com:8443" "example.com"
+    "127.0.0.1:1"      "127.0.0.1"
+    "[::1]:8443"       "[::1]"
+    "[::1]"            "[::1]"
+    ""                 nil
+    nil                nil))
+
+(deftest test-flat-headers
+  (is (= [] (flat-headers nil)))
+  (is (= [] (flat-headers {})))
+  (is (= ["content-type" "text/plain"] (flat-headers {"Content-Type" "text/plain"})))
+  (testing "names are lowercased, keywords and non-string values are allowed"
+    (is (= ["x-a" "1"] (flat-headers {:X-A 1}))))
+  (testing "sequential values become repeated headers"
+    (is (= ["set-cookie" "a=1" "set-cookie" "b=2"]
+           (flat-headers {"Set-Cookie" ["a=1" "b=2"]})))
+    (is (= ["x" "1" "x" "2"] (flat-headers {"x" (list 1 2)})))))
+
+(deftest test-build-request
+  (let [fields ["POST" "/a%20b" "x=1" "https" "example.com:8443" 257 "10.0.0.1" 8443]
+        req    (build-request 1 fields ["host" "example.com:8443" "x-dup" "1" "x-dup" "2"] true)]
+    (is (= :post (:request-method req)))
+    (is (= "/a%20b" (:uri req)) "the URI is not decoded")
+    (is (= "x=1" (:query-string req)))
+    (is (= :https (:scheme req)))
+    (is (= "example.com" (:server-name req)))
+    (is (= 8443 (:server-port req)))
+    (is (= "10.0.0.1" (:remote-addr req)))
+    (is (= "HTTP/1.1" (:protocol req)))
+    (is (= {"host" "example.com:8443" "x-dup" "1,2"} (:headers req)))
+    (is (fn? (:body req)) "the body is a reader fn"))
+  (testing "no query string, no body"
+    (let [req (build-request 1 ["GET" "/" nil "https" "h" 768 "::1" 1] [] false)]
+      (is (not (contains? req :query-string)))
+      (is (not (contains? req :body)))
+      (is (= "HTTP/3.0" (:protocol req)))))
+  (testing "methods are lowercased keywords, including unknown ones"
+    (is (= :purge (:request-method (build-request 1 ["PURGE" "/" nil "https" "h" 512 "a" 1] [] false)))))
+  (testing "protocol versions"
+    (are [v p] (= p (:protocol (build-request 1 ["GET" "/" nil "https" "h" v "a" 1] [] false)))
+      256 "HTTP/1.0"
+      257 "HTTP/1.1"
+      512 "HTTP/2.0"
+      768 "HTTP/3.0")))

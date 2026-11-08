@@ -1,0 +1,145 @@
+;; Ported from ring-codec's test/ring/util/test/codec.clj (MIT).
+;; UTF-16 and Charset-object cases are replaced by tests that the encoding argument
+;; is accepted and ignored (UTF-8 only); base64 is not ported.
+(ns ring.util.codec-test
+  (:require [clojure.test :refer [deftest is testing are]]
+            [ring.util.codec :refer :all]))
+
+;; jank cannot lex non-ASCII string literals, so build them from percent-encoding.
+(def e-acute (percent-decode "%C3%A9"))
+
+(deftest test-percent-encode
+  (is (= (percent-encode " ") "%20"))
+  (is (= (percent-encode "+") "%2B"))
+  (is (= (percent-encode "foo") "%66%6F%6F"))
+  (testing "multi-byte UTF-8 is encoded byte by byte"
+    (is (= (percent-encode e-acute) "%C3%A9")))
+  (testing "encoding argument is ignored"
+    (is (= (percent-encode "foo" "UTF-16") "%66%6F%6F"))))
+
+(deftest test-percent-decode
+  (is (= (percent-decode "%s4/") "%s4/"))
+  (is (= (percent-decode "%20") " "))
+  (is (= (percent-decode "foo%20bar") "foo bar"))
+  (is (= (percent-decode "%24") "$"))
+  (testing "malformed or truncated escapes are left alone"
+    (is (= (percent-decode "%") "%"))
+    (is (= (percent-decode "%2") "%2"))
+    (is (= (percent-decode "%zz%41") "%zzA"))
+    (is (= (percent-decode "100%") "100%")))
+  (testing "lower-case hex"
+    (is (= (percent-decode "%2f") "/")))
+  (testing "NUL bytes survive"
+    (is (= (count (percent-decode "a%00b")) 3))
+    (is (= (percent-encode (percent-decode "a%00b")) "%61%00%62"))))
+
+(deftest test-url-encode
+  (is (= (url-encode "foo/bar") "foo%2Fbar"))
+  (is (= (url-encode "foo/bar" nil) "foo%2Fbar"))
+  (is (= (url-encode "foo/bar" "UTF-8") "foo%2Fbar"))
+  (is (= (url-encode "foo+bar") "foo+bar"))
+  (is (= (url-encode "foo bar") "foo%20bar"))
+  (is (= (url-encode "a_b~c.d-e") "a_b~c.d-e"))
+  (is (= (url-encode e-acute) "%C3%A9"))
+  (is (= (url-encode 42) "42")))
+
+(deftest test-url-decode
+  (is (= (url-decode "foo%2Fbar") "foo/bar"))
+  (is (= (url-decode "%") "%"))
+  (is (= (url-decode "foo+bar") "foo+bar") "url-decode does not treat + as space")
+  (is (= (url-decode (url-encode (str "a b/" e-acute "?&="))) (str "a b/" e-acute "?&="))))
+
+(deftest test-form-encode
+  (testing "strings"
+    (are [x y] (= (form-encode x) y)
+      "foo bar" "foo+bar"
+      "foo+bar" "foo%2Bbar"
+      "foo/bar" "foo%2Fbar"
+      "a*b.c_d-e" "a*b.c_d-e"
+      "~" "%7E")
+    (is (= (form-encode e-acute) "%C3%A9")))
+  (testing "maps"
+    (are [x y] (= (form-encode x) y)
+      {"a" "b"}         "a=b"
+      {:a "b"}          "a=b"
+      {"a" 1}           "a=1"
+      {"a" nil}         "a="
+      {"a" "b" "c" "d"} "a=b&c=d"
+      {"a" "b c"}       "a=b+c"
+      {"a" ["b" "c"]}   "a=b&a=c"
+      {"a" ["c" "b"]}   "a=c&a=b"
+      {"a" (seq [1 2])} "a=1&a=2"
+      {"a" #{"c" "b"}}  "a=b&a=c"
+      {"a b" "c"}       "a+b=c"))
+  (testing "nil and other values"
+    (is (= (form-encode nil) ""))
+    (is (= (form-encode 42) "42"))))
+
+(deftest test-form-decode-str
+  (is (= (form-decode-str "foo=bar+baz") "foo=bar baz"))
+  (is (nil? (form-decode-str "%D")))
+  (is (nil? (form-decode-str "%")))
+  (is (nil? (form-decode-str "%zz")))
+  (is (= (form-decode-str "foo=bar+baz" nil) "foo=bar baz"))
+  (is (= (form-decode-str "foo=bar+baz" "UTF-8") "foo=bar baz"))
+  (is (= (form-decode-str "%C3%A9") e-acute))
+  (is (= (form-decode-str "plain") "plain")))
+
+(deftest test-form-decode-map
+  (are [x y] (= (form-decode-map x) y)
+    "foo"     {"foo" ""}
+    "a=b"     {"a" "b"}
+    "a=b&c=d" {"a" "b" "c" "d"}
+    "foo+bar" {"foo bar" ""}
+    "a=b+c"   {"a" "b c"}
+    "a=b%2Fc" {"a" "b/c"}
+    "a=b&c"   {"a" "b" "c" ""}
+    "a=&b=c"  {"a" "" "b" "c"}
+    "a&b=c"   {"a" "" "b" "c"}
+    "="       {"" ""}
+    "a="      {"a" ""}
+    "=b"      {"" "b"}
+    "a=b=c"   {"a" "b=c"}
+    "a=1&a=2" {"a" ["1" "2"]}
+    "a=1&a=2&a=3" {"a" ["1" "2" "3"]}
+    ""        {}
+    "&&a=b&&" {"a" "b"})
+  (testing "invalid URL encoding"
+    (are [x y] (= (form-decode-map x) y)
+      "%=b" {}
+      "a=%" {}
+      "%=%" {}
+      "a=%&b=c" {"b" "c"}))
+  (is (= (form-decode-map "a=foo%2Fbar" nil)
+         {"a" "foo/bar"})))
+
+(deftest test-form-decode
+  (are [x y] (= (form-decode x) y)
+    "foo"     "foo"
+    "a=b"     {"a" "b"}
+    "a=b&c=d" {"a" "b" "c" "d"}
+    "foo+bar" "foo bar"
+    "a=b+c"   {"a" "b c"}
+    "a=b%2Fc" {"a" "b/c"}
+    "a=b&c"   {"a" "b" "c" ""}
+    "a=&b=c"  {"a" "" "b" "c"}
+    "a&b=c"   {"a" "" "b" "c"}
+    "="       {"" ""}
+    "a="      {"a" ""}
+    "=b"      {"" "b"})
+  (testing "invalid URL encoding"
+    (are [x y] (= (form-decode x) y)
+      "%=b" {}
+      "a=%" {}
+      "%=%" {}))
+  (is (= (form-decode "a=foo%2Fbar" nil)
+         {"a" "foo/bar"})))
+
+(deftest test-round-trip
+  (let [params {"q" (str "caf" e-acute " & co") "empty" "" "list" ["1" "2"]}]
+    (is (= (form-decode-map (form-encode params)) params))))
+
+(deftest test-assoc-conj
+  (is (= (assoc-conj {} :a 1) {:a 1}))
+  (is (= (assoc-conj {:a 1} :a 2) {:a [1 2]}))
+  (is (= (assoc-conj {:a [1 2]} :a 3) {:a [1 2 3]})))
