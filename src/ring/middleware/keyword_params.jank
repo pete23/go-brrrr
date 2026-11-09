@@ -17,6 +17,9 @@
 
 (defn- keyify-params [target parse-namespaces?]
   (cond
+    (and (map? target) (empty? target))
+    target
+
     (map? target)
     (into {}
           (for [[k v] target]

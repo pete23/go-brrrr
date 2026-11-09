@@ -1,6 +1,7 @@
 ;; Ported from ring-core 1.15.6 (MIT, see src/ring/LICENSE) for jank.
 ;; Differences: the request body is already a string (see ring.adapter.h2o), so it is
-;; read with body-string rather than slurp; only UTF-8 is supported.
+;; read with body-string rather than slurp; only UTF-8 is supported. params-request skips
+;; straight to empty maps when there is no query string or form body.
 (ns ring.middleware.params
   "Middleware to parse url-encoded parameters from the query string and request
   body."
@@ -46,15 +47,22 @@
   ([request]
    (params-request request {}))
   ([request options]
-   (let [encoding (or (:encoding options)
-                      (req/character-encoding request)
-                      "UTF-8")
-         request  (if (:form-params request)
-                    request
-                    (assoc-form-params request encoding))]
-     (if (:query-params request)
-       request
-       (assoc-query-params request encoding)))))
+   (if (or (and (not (:form-params request)) (:body request) (req/urlencoded-form? request))
+           (and (not (:query-params request)) (:query-string request)))
+     (let [encoding (or (:encoding options)
+                        (req/character-encoding request)
+                        "UTF-8")
+           request  (if (:form-params request)
+                      request
+                      (assoc-form-params request encoding))]
+       (if (:query-params request)
+         request
+         (assoc-query-params request encoding)))
+     ;; Nothing to parse: add what the general path would, without the work.
+     (cond-> request
+       (not (:form-params request))  (assoc :form-params {})
+       (not (:query-params request)) (assoc :query-params {})
+       (not (:params request))       (assoc :params {})))))
 
 (defn wrap-params
   "Middleware to parse urlencoded parameters from the query string and form

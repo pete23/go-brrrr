@@ -6,7 +6,9 @@
   Runs each protocol in turn for `duration` seconds at `rate` requests/second in
   total, spread over `clients` connections. Fails if any request fails, any
   response is not 2xx, the achieved rate falls more than 5% short, or the server
-  dies. HTTP/3 needs an h2load built with QUIC support (it is skipped otherwise)."
+  dies. Also reports bytes allocated per request (from the server's GC, via
+  BRRRR_STATS), failing over --max-bytes-per-request if given. HTTP/3 needs an
+  h2load built with QUIC support (it is skipped otherwise)."
   (:require [babashka.cli :as cli]
             [babashka.process :as p]
             [clojure.string :as str]
@@ -18,7 +20,15 @@
    :clients   {:default 10 :coerce :long :desc "concurrent connections"}
    :path      {:default "/" :desc "request path"}
    :protocols {:default "h1,h2,h3" :desc "comma-separated subset of h1,h2,h3"}
-   :binary    {:default "target/release/go-brrrr" :desc "server to start (port is appended)"}})
+   :binary    {:default "target/release/go-brrrr" :desc "server to start (port is appended)"}
+   :max-bytes-per-request {:coerce :long :desc "fail if the server allocates more than this per request"}})
+
+(defn stats
+  "The server's request count and GC totals (BRRRR_STATS endpoint)."
+  [server]
+  (let [{:keys [out]} (p/shell {:out :string :err :string :continue true}
+                               "curl" "-sk" (str (:base server) "/_brrrr/stats"))]
+    (into {} (for [[_ k v] (re-seq #"(\w+) (\d+)" out)] [(keyword k) (parse-long v)]))))
 
 (defn h3-supported?
   "Whether this h2load speaks HTTP/3: builds without QUIC still accept
@@ -76,30 +86,42 @@
         argv (concat ["h2load"] (proto-flags proto)
                      ["-c" (str clients) "--rps" (str per-client) "-D" (str duration)
                       (str (:base server) path)])
+        before (stats server)
         {:keys [out err exit]} (apply p/shell {:out :string :err :string :continue true} argv)
-        result (assoc (parse out) :protocol proto :target-rps (* per-client clients) :exit exit)]
+        after  (stats server)
+        reqs   (- (:requests after 0) (:requests before 0))
+        result (assoc (parse out) :protocol proto :target-rps (* per-client clients) :exit exit
+                      :bytes-per-request (when (pos? reqs)
+                                           (quot (- (:allocated_bytes after) (:allocated_bytes before)) reqs))
+                      :gcs (some-> (:gc_count after) (- (:gc_count before))))]
     (when-not (zero? exit)
       (println err))
     result))
 
-(defn problems [{:keys [exit total succeeded failed errored timeout status-2xx rps target-rps]}]
+(defn problems [{:keys [exit total succeeded failed errored timeout status-2xx rps target-rps
+                        bytes-per-request max-bytes-per-request]}]
   (cond-> []
     (not (zero? exit))                       (conj (str "h2load exited " exit))
     (nil? total)                             (conj "no summary from h2load")
     (and total (not= total succeeded))       (conj (str (- total succeeded) " requests did not succeed"))
     (some pos? (keep identity [failed errored timeout])) (conj (str "failed/errored/timeout: " failed "/" errored "/" timeout))
     (and total (not= total status-2xx))      (conj (str (- total (or status-2xx 0)) " non-2xx responses"))
-    (and rps (< rps (* 0.95 target-rps)))    (conj (format "achieved %.1f req/s, target %d" rps target-rps))))
+    (and rps (< rps (* 0.95 target-rps)))    (conj (format "achieved %.1f req/s, target %d" rps target-rps))
+    (and max-bytes-per-request (nil? bytes-per-request)) (conj "no allocation stats from the server")
+    (and max-bytes-per-request bytes-per-request (> bytes-per-request max-bytes-per-request))
+    (conj (format "allocated %d bytes/request, budget %d" bytes-per-request max-bytes-per-request))))
 
-(defn report [{:keys [protocol rps target-rps total succeeded latency-ms]}]
+(defn report [{:keys [protocol rps target-rps total succeeded latency-ms bytes-per-request gcs]}]
   (let [{:keys [min mean max sd]} latency-ms]
-    (println (format "%-3s %8.2f req/s (target %d)  %d/%d ok  latency ms min %.2f mean %.2f max %.2f sd %.2f"
+    (println (format "%-3s %8.2f req/s (target %d)  %d/%d ok  latency ms min %.2f mean %.2f max %.2f sd %.2f  alloc %s/req, %s GCs"
                      protocol (or rps 0.0) target-rps (or succeeded 0) (or total 0)
-                     (or min 0.0) (or mean 0.0) (or max 0.0) (or sd 0.0)))))
+                     (or min 0.0) (or mean 0.0) (or max 0.0) (or sd 0.0)
+                     (if bytes-per-request (format "%.1fKB" (/ bytes-per-request 1024.0)) "?")
+                     (or gcs "?")))))
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec spec})]
-    (h/with-server* [(:binary opts)]
+    (h/with-server* [(:binary opts)] {:env {"BRRRR_STATS" "1"}}
       (fn []
         (let [requested (str/split (:protocols opts) #",")
               h3?       (and (some #{"h3"} requested) (h3-supported? h/*server*))
@@ -110,7 +132,8 @@
                        (for [proto protocols]
                          (do (println (format "%s: %ds at %d req/s over %d clients..."
                                               proto (:duration opts) (:rate opts) (:clients opts)))
-                             (let [r (run-one h/*server* proto opts)]
+                             (let [r (assoc (run-one h/*server* proto opts)
+                                            :max-bytes-per-request (:max-bytes-per-request opts))]
                                (report r)
                                r))))
               failures (for [r results, prob (problems r)] (str (:protocol r) ": " prob))

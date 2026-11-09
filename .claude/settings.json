@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(h2load *)",
+      "Bash(bb bench)",
+      "Bash(bb bench *)",
+      "Bash(bb test)",
+      "Bash(bb test:unit)",
+      "Bash(bb test:integration)",
+      "Bash(bb test:app)",
+      "Bash(sample *)",
+      "Bash(brew list *)",
+      "mcp__claude_ai_Claude_Docs__read",
+      "mcp__claude_ai_Claude_Docs__guide"
+    ]
+  }
+}

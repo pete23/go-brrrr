@@ -44,11 +44,12 @@
   (.isAlive ^Process (:proc (:process server))))
 
 (defn start!
-  "Starts `argv + [port]` and waits for it to log that it is listening."
-  [argv & {:keys [timeout-ms] :or {timeout-ms 300000}}]
+  "Starts `argv + [port]` and waits for it to log that it is listening. `env` adds
+  environment variables."
+  [argv & {:keys [timeout-ms env] :or {timeout-ms 300000}}]
   (let [port    (free-port)
         log     (str (fs/create-temp-file {:prefix "server-" :suffix ".log"}))
-        proc    (p/process (conj (vec argv) (str port)) {:dir root :out (fs/file log) :err :out})
+        proc    (p/process (conj (vec argv) (str port)) {:dir root :out (fs/file log) :err :out :extra-env env})
         server  {:port port :base (str "https://127.0.0.1:" port) :log log :process proc}
         started (System/currentTimeMillis)]
     (loop []
@@ -81,10 +82,12 @@
     (/ (parse-long (str/trim out)) 1024.0)))
 
 (defn with-server*
-  "Runs `f` with *server* bound to a fresh server started from `argv`."
-  [argv f]
-  (binding [*server* (start! argv)]
-    (try (f) (finally (stop! *server*)))))
+  "Runs `f` with *server* bound to a fresh server started from `argv` (and `opts`, as
+  for start!)."
+  ([argv f] (with-server* argv {} f))
+  ([argv opts f]
+   (binding [*server* (apply start! argv (mapcat identity opts))]
+     (try (f) (finally (stop! *server*))))))
 
 (defn server-fixture
   "A :once fixture: one server per test namespace."

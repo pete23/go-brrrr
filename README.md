@@ -101,12 +101,20 @@ bb bench --rate 5000 --clients 50 --duration 30  # each client sends rate/client
 bb bench --protocols h2 --path '/add?a=1&b=2'
 ```
 
-It prints achieved req/s and latency (min/mean/max/sd) per protocol and fails if any request
-fails, any response isn't 2xx, the rate falls more than 5% short, or the server dies.
-HTTP/3 runs only if your h2load was built with QUIC support (it probes with one request;
-Ubuntu's isn't; neither is Homebrew's). Baselines: cloud VM, 4 vCPU: 100.00 req/s on h1 and
-h2, mean latency ~0.8ms, max ~17ms. M2 Pro (macOS): 100.00 req/s, mean ~0.7–1.0ms, max ~7ms;
-uncapped (`h2load -c 50`), ~22k req/s on h1 and h2, where allocation in jank's GC is the limit.
+It prints achieved req/s, latency (min/mean/max/sd), and bytes the server allocated per
+request and GCs run, per protocol. It fails if any request fails, any response isn't 2xx, the
+rate falls more than 5% short, the server dies, or allocation exceeds
+`--max-bytes-per-request` when given. HTTP/3 runs only if your h2load was built with QUIC
+support (it probes with one request; Ubuntu's isn't; neither is Homebrew's).
+
+The allocation figure comes from the server: with `BRRRR_STATS` set in its environment (the
+bench sets it), `GET /_brrrr/stats` is answered by the adapter's C++ bridge, without reaching
+the handler, with the request count and the GC's allocated bytes, collections and heap size.
+
+Baselines: cloud VM, 4 vCPU: 100.00 req/s on h1 and h2, mean latency ~0.8ms, max ~17ms.
+M2 Pro (macOS): 100.00 req/s, mean ~0.6ms; `GET /` allocates ~9.7KB and `/add?a=1&b=2`
+~17KB per request; uncapped (`h2load -c 50`), ~43k req/s for `/` and ~25k for `/add` on h1
+and h2. Allocation is the limit: jank's GC takes a global lock to allocate.
 
 For finding the ceiling rather than holding a rate, drop `--rps` and use h2load directly,
 e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
@@ -115,8 +123,10 @@ e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
 ## Layout
 
 - `src/go_brrrr/main.jank` – the app: a plain Ring handler plus middleware.
-- `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps in jank and streams
-  bodies both ways; a small `cpp/raw` bridge marshals between them and the C shim.
+- `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
+  both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
+  header map and method/scheme keywords itself and reusing boxed constants for common
+  header names.
 - `src/ring/...` – the parts of ring-core (and ring-codec) ported to jank so far. Each file
   says what changed from upstream. MIT, see `src/ring/LICENSE`.
   - `ring.util.codec`, `.parsing`, `.request`, `.response` (minus file/resource responses),
@@ -133,7 +143,8 @@ e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
 ## Streaming and threads
 
 h2o's event loop runs on the thread that calls `run-h2o`; handlers run on a pool of worker
-threads (`:threads`, default 8), so they may block. Each request is an *exchange* shared by
+threads (`:threads`, default 8), so they may block. At startup the GC heap is grown to
+`:initial-heap-size` (default 64MiB) so that a busy server collects less often. Each request is an *exchange* shared by
 the two sides: request body chunks flow loop → worker and response chunks worker → loop,
 each direction buffered up to 1MB. Past that, h2o stops reading from the client, or
 `write!` blocks until the client catches up, so memory stays bounded whatever the body size.

@@ -29,9 +29,13 @@
 ;; live requests so a body reader called after its request finished fails safely
 ;; instead of touching freed memory.
 
-(cpp/raw "#include <cstdio>
+(cpp/raw "#include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 #include <gc.h>
@@ -139,9 +143,142 @@ namespace ring_h2o
     { brrrr_fail(req); }
   }
 
+  /* Keep o alive for good: an uncollectable cell is scanned by the GC but never freed. */
+  inline object_ref keep(object_ref const o)
+  {
+    new(GC_MALLOC_UNCOLLECTABLE(sizeof(object_ref))) object_ref{ o };
+    return o;
+  }
+
+  /* Values every request would otherwise box afresh. */
+  struct constants_t
+  {
+    std::unordered_map<std::string_view, object_ref> header_names;
+    std::unordered_map<std::string_view, object_ref> methods;
+    object_ref https, http;
+    std::unordered_map<int, object_ref> protocols;
+  };
+
+  inline constants_t const &constants()
+  {
+    static constants_t const c{ [] {
+      constants_t c;
+      for(char const * const name :
+          { \"accept\", \"accept-encoding\", \"accept-language\", \"authorization\", \"cache-control\",
+            \"connection\", \"content-length\", \"content-type\", \"cookie\", \"dnt\", \"expect\", \"host\",
+            \"if-modified-since\", \"if-none-match\", \"origin\", \"pragma\", \"priority\", \"range\", \"referer\",
+            \"sec-fetch-dest\", \"sec-fetch-mode\", \"sec-fetch-site\", \"sec-fetch-user\", \"te\",
+            \"transfer-encoding\", \"upgrade-insecure-requests\", \"user-agent\", \"x-forwarded-for\",
+            \"x-forwarded-proto\", \"x-request-id\" })
+      { c.header_names.emplace(name, keep(make_box(name).erase())); }
+      for(auto const &[upper, lower] :
+          { std::pair{ \"GET\", \"get\" }, { \"HEAD\", \"head\" }, { \"POST\", \"post\" }, { \"PUT\", \"put\" },
+            { \"DELETE\", \"delete\" }, { \"OPTIONS\", \"options\" }, { \"PATCH\", \"patch\" } })
+      { c.methods.emplace(upper, __rt_ctx->intern_keyword(lower).expect_ok().erase()); }
+      c.https = __rt_ctx->intern_keyword(\"https\").expect_ok().erase();
+      c.http = __rt_ctx->intern_keyword(\"http\").expect_ok().erase();
+      for(auto const &[version, name] :
+          { std::pair{ 256, \"HTTP/1.0\" }, { 257, \"HTTP/1.1\" }, { 512, \"HTTP/2.0\" }, { 768, \"HTTP/3.0\" } })
+      { c.protocols.emplace(version, keep(make_box(name).erase())); }
+      return c;
+    }() };
+    return c;
+  }
+
+  inline object_ref box(brrrr_str_t const s)
+  { return make_box(jtl::immutable_string_view{ s.base, s.len }).erase(); }
+
+  /* Methods become lowercased keywords. */
+  inline object_ref method_keyword(brrrr_str_t const m)
+  {
+    auto const &c{ constants() };
+    if(auto const it{ c.methods.find(std::string_view{ m.base, m.len }) }; it != c.methods.end())
+    { return it->second; }
+    return __rt_ctx->intern_keyword(ascii_lower(std::string{ m.base, m.len })).expect_ok().erase();
+  }
+
+  inline object_ref scheme_keyword(brrrr_str_t const s)
+  {
+    auto const &c{ constants() };
+    std::string_view const v{ s.base, s.len };
+    if(v == \"https\") { return c.https; }
+    if(v == \"http\") { return c.http; }
+    return __rt_ctx->intern_keyword(std::string{ v }).expect_ok().erase();
+  }
+
+  inline object_ref protocol(int const version)
+  {
+    auto const &c{ constants() };
+    if(auto const it{ c.protocols.find(version) }; it != c.protocols.end())
+    { return it->second; }
+    return make_box(jtl::immutable_string_view{ \"HTTP/\" + std::to_string(version) }).erase();
+  }
+
+  /* The Ring header map. h2o has lowercased the names; repeated headers are joined with
+   * commas, as other Ring adapters do. */
+  inline object_ref header_map(brrrr_request_t const * const req)
+  {
+    auto const &c{ constants() };
+    std::vector<std::pair<std::string_view, std::string>> joined;
+    joined.reserve(req->num_headers);
+    for(size_t i{}; i < req->num_headers; ++i)
+    {
+      std::string_view const name{ req->headers[i].name.base, req->headers[i].name.len };
+      std::string_view const value{ req->headers[i].value.base, req->headers[i].value.len };
+      auto const it{ std::find_if(joined.begin(), joined.end(), [&](auto const &p) { return p.first == name; }) };
+      if(it == joined.end())
+      { joined.emplace_back(name, value); }
+      else
+      {
+        it->second += ',';
+        it->second += value;
+      }
+    }
+    object_ref m{ transient(obj::persistent_array_map::empty().erase()) };
+    for(auto const &[name, value] : joined)
+    {
+      auto const known{ c.header_names.find(name) };
+      m = assoc_in_place(m,
+                         known == c.header_names.end() ? make_box(jtl::immutable_string_view{ name }).erase()
+                                                       : known->second,
+                         make_box(jtl::immutable_string_view{ value }).erase());
+    }
+    return persistent(m);
+  }
+
+  /* With BRRRR_STATS set, GET /_brrrr/stats is answered here, without entering jank, with
+   * the request count and the GC's totals: bb bench diffs them into bytes per request. */
+  inline std::atomic<int64_t> &request_count()
+  {
+    static std::atomic<int64_t> n{};
+    return n;
+  }
+
+  inline bool stats_request(brrrr_request_t * const req)
+  {
+    static bool const enabled{ std::getenv(\"BRRRR_STATS\") != nullptr };
+    static std::string_view const path{ \"/_brrrr/stats\" };
+    if(!enabled || std::string_view{ req->path.base, req->path.len } != path)
+    { return false; }
+    char body[256];
+    int const len{ std::snprintf(body,
+                                 sizeof(body),
+                                 \"requests %lld\\nallocated_bytes %llu\\ngc_count %llu\\nheap_bytes %llu\\n\",
+                                 static_cast<long long>(request_count().load()),
+                                 static_cast<unsigned long long>(GC_get_total_bytes()),
+                                 static_cast<unsigned long long>(GC_get_gc_no()),
+                                 static_cast<unsigned long long>(GC_get_heap_size())) };
+    brrrr_header_t const ct{ { \"content-type\", 12 }, { \"text/plain\", 10 } };
+    brrrr_respond(req, 200, &ct, 1, brrrr_str_t{ body, static_cast<size_t>(len) });
+    return true;
+  }
+
   inline void handle(brrrr_request_t * const req)
   {
     static jank_object_ref const dispatch_var{ jank_var_intern_c(\"ring.adapter.h2o\", \"-dispatch\") };
+    if(stats_request(req))
+    { return; }
+    request_count().fetch_add(1, std::memory_order_relaxed);
     auto &r{ registry() };
     int64_t id;
     {
@@ -151,25 +288,18 @@ namespace ring_h2o
     }
     try
     {
-      std::vector<std::string> headers;
-      headers.reserve(req->num_headers * 2);
-      for(size_t i{}; i < req->num_headers; ++i)
-      {
-        headers.emplace_back(req->headers[i].name.base, req->headers[i].name.len);
-        headers.emplace_back(req->headers[i].value.base, req->headers[i].value.len);
-      }
       jank_call4(jank_deref(dispatch_var),
                  jank_integer_create(id),
                  jank_vector_create(8,
-                                    str(req->method),
+                                    method_keyword(req->method).raw(),
                                     str(req->path),
                                     str(req->query),
-                                    str(req->scheme),
+                                    scheme_keyword(req->scheme).raw(),
                                     str(req->authority),
-                                    jank_integer_create(req->http_version),
+                                    protocol(req->http_version).raw(),
                                     str(req->remote_addr),
                                     jank_integer_create(req->server_port)),
-                 convert<std::vector<std::string>>::into_object(headers).erase().raw(),
+                 header_map(req).raw(),
                  req->has_body ? jank_const_true() : jank_const_false());
     }
     catch(...)
@@ -190,8 +320,12 @@ namespace ring_h2o
   }
 
   inline int serve(char const *host, int const port, char const *cert, char const *key, int const workers,
-                   int64_t const max_body)
+                   int64_t const max_body, int64_t const initial_heap)
   {
+    /* The GC collects whenever it has allocated a fraction of the heap; jank's default heap is
+     * small, so a busy server stops the world for a full mark every few hundred requests. */
+    if(auto const heap{ static_cast<int64_t>(GC_get_heap_size()) }; initial_heap > heap)
+    { GC_expand_hp(static_cast<size_t>(initial_heap - heap)); }
     GC_allow_register_threads();
     brrrr_config_t const config{ host,          static_cast<uint16_t>(port),     cert,
                                  key,           handle,                          static_cast<size_t>(workers),
@@ -202,31 +336,18 @@ namespace ring_h2o
 
 (defonce ^:private current-handler (atom nil))
 
-(def ^:private protocols
-  {256 "HTTP/1.0"
-   257 "HTTP/1.1"
-   512 "HTTP/2.0"
-   768 "HTTP/3.0"})
-
 (defn- log [& args]
   (binding [*out* *err*]
     (apply println "ring.adapter.h2o:" args)))
-
-(defn- header-map
-  "Flat [name value ...] into a Ring header map; repeated headers are joined with
-  commas, as other Ring adapters do."
-  [flat]
-  (reduce (fn [m [k v]]
-            (assoc m k (if-let [old (get m k)] (str old "," v) v)))
-          {}
-          (partition 2 flat)))
 
 (defn- server-name [authority]
   (cond
     (str/blank? authority)           nil
     (str/starts-with? authority "[") (subs authority 0 (inc (or (str/index-of authority "]")
                                                                 (dec (count authority)))))
-    :else                            (first (str/split authority #":"))))
+    :else                            (if-let [i (str/index-of authority ":")]
+                                       (subs authority 0 i)
+                                       authority)))
 
 (defn- client-gone []
   (ex-info "client went away" {:type ::closed}))
@@ -239,15 +360,17 @@ namespace ring_h2o
         chunk))))
 
 (defn- build-request
-  [id [method uri query scheme authority version remote-addr server-port] headers has-body]
+  "The method and scheme arrive as keywords and the headers as a Ring header map,
+  built by the C++ bridge (reusing boxed constants where it can)."
+  [id [method uri query scheme authority protocol remote-addr server-port] headers has-body]
   (cond-> {:server-port    server-port
            :server-name    (server-name authority)
            :remote-addr    remote-addr
            :uri            uri
-           :scheme         (keyword scheme)
-           :request-method (keyword (cpp/ring_h2o.ascii_lower method))
-           :protocol       (protocols version (str "HTTP/" version))
-           :headers        (header-map headers)}
+           :scheme         scheme
+           :request-method method
+           :protocol       protocol
+           :headers        headers}
     query    (assoc :query-string query)
     has-body (assoc :body (body-reader id))))
 
@@ -310,12 +433,15 @@ namespace ring_h2o
   :key-file      - PEM private key (required)
   :threads       - worker threads running the handler (default 8)
   :max-body-size - largest request body accepted, in bytes (default 1GiB)
+  :initial-heap-size - grow the GC heap to this many bytes at startup (default 64MiB):
+                   fewer collections for more memory
 
   Pass a var (#'handler) to pick up redefinitions without restarting."
-  [handler {:keys [host port cert-file key-file threads max-body-size]
-            :or   {host "0.0.0.0" port 8443 threads 8 max-body-size 1073741824}}]
+  [handler {:keys [host port cert-file key-file threads max-body-size initial-heap-size]
+            :or   {host "0.0.0.0" port 8443 threads 8 max-body-size 1073741824
+                   initial-heap-size 67108864}}]
   (when-not (and cert-file key-file)
     (throw (ex-info "run-h2o needs :cert-file and :key-file" {})))
   (reset! current-handler handler)
-  (let [rc (cpp/ring_h2o.serve host port cert-file key-file threads max-body-size)]
+  (let [rc (cpp/ring_h2o.serve host port cert-file key-file threads max-body-size initial-heap-size)]
     (throw (ex-info "h2o failed to start" {:code rc}))))
