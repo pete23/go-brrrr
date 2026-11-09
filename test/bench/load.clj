@@ -52,8 +52,15 @@
         counts (fn [l k] (some-> (re-find (re-pattern (str "(\\d+) " k)) (or l "")) second parse-long))
         req    (line "requests:")
         codes  (line "status codes:")
-        ;; "time for request:  306us  5.23ms  896us  472us  92.10%"
-        [mn mx mean sd] (some-> (line "time for request:") (str/split #"\s+") (->> (drop 3)))]
+        ;; Read columns by the header above them, which differs between versions:
+        ;;   "        min  max  mean  sd  +/- sd"  /  "time for request:  306us  5.23ms  896us  472us  92.10%"
+        ;;   "        min  max  median  p95  p99  mean  sd  +/- sd"  /  "request     :  178us  990us  ...  (1.67+)"
+        lines  (mapv str/trim (str/split-lines out))
+        row    (some (fn [[hdr l]] (when (re-find #"^(time for request|request\s*):" l) [hdr l]))
+                     (partition 2 1 lines))
+        stats  (when-let [[hdr l] row]
+                 (zipmap (str/split hdr #"\s+") (str/split (str/trim (subs l (inc (str/index-of l ":")))) #"\s+")))
+        {mn "min" mx "max" mean "mean" sd "sd"} stats]
     {:rps       (some->> (line "finished in") (re-find #"([\d.]+) req/s") second parse-double)
      :total     (counts req "total")
      :succeeded (counts req "succeeded")

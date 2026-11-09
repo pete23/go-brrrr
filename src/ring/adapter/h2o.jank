@@ -48,6 +48,17 @@ namespace ring_h2o
     int64_t next_id{ 1 };
   };
 
+  /* For methods and header names (ASCII tokens). clojure.string/lower-case builds a
+   * std::locale per call, which on macOS takes a process-wide lock: a request-rate ceiling. */
+  inline std::string ascii_lower(std::string s)
+  {
+    for(auto &c : s)
+    {
+      if(c >= 'A' && c <= 'Z') { c += 'a' - 'A'; }
+    }
+    return s;
+  }
+
   inline registry_t &registry()
   {
     static registry_t r;
@@ -234,7 +245,7 @@ namespace ring_h2o
            :remote-addr    remote-addr
            :uri            uri
            :scheme         (keyword scheme)
-           :request-method (keyword (str/lower-case method))
+           :request-method (keyword (cpp/ring_h2o.ascii_lower method))
            :protocol       (protocols version (str "HTTP/" version))
            :headers        (header-map headers)}
     query    (assoc :query-string query)
@@ -242,7 +253,7 @@ namespace ring_h2o
 
 (defn- flat-headers [headers]
   (vec (mapcat (fn [[k v]]
-                 (let [k (str/lower-case (name k))]
+                 (let [k (cpp/ring_h2o.ascii_lower (name k))]
                    (if (sequential? v)
                      (mapcat (fn [x] [k (str x)]) v)
                      [k (str v)])))

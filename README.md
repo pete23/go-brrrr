@@ -104,8 +104,9 @@ bb bench --protocols h2 --path '/add?a=1&b=2'
 It prints achieved req/s and latency (min/mean/max/sd) per protocol and fails if any request
 fails, any response isn't 2xx, the rate falls more than 5% short, or the server dies.
 HTTP/3 runs only if your h2load was built with QUIC support (it probes with one request;
-Ubuntu's isn't). Baseline here (cloud VM, 4 vCPU): 100.00 req/s on h1 and h2, mean latency
-~0.8ms, max ~17ms.
+Ubuntu's isn't; neither is Homebrew's). Baselines: cloud VM, 4 vCPU: 100.00 req/s on h1 and
+h2, mean latency ~0.8ms, max ~17ms. M2 Pro (macOS): 100.00 req/s, mean ~0.7–1.0ms, max ~7ms;
+uncapped (`h2load -c 50`), ~22k req/s on h1 and h2, where allocation in jank's GC is the limit.
 
 For finding the ceiling rather than holding a rate, drop `--rps` and use h2load directly,
 e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
