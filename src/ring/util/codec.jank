@@ -20,6 +20,12 @@ namespace ring_codec
     return -1;
   }
 
+  /* ASCII only: isalnum is locale-dependent, and macOS's says yes to UTF-8 lead bytes. */
+  inline bool ascii_alnum(unsigned char c)
+  {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+  }
+
   inline void put_escaped(std::string &out, unsigned char c)
   {
     out += '%';
@@ -42,7 +48,7 @@ namespace ring_codec
     std::string out;
     for(unsigned char c : s)
     {
-      if(isalnum(c) || c == '_' || c == '~' || c == '.' || c == '+' || c == '-') { out += c; }
+      if(ascii_alnum(c) || c == '_' || c == '~' || c == '.' || c == '+' || c == '-') { out += c; }
       else { put_escaped(out, c); }
     }
     return out;
@@ -54,7 +60,7 @@ namespace ring_codec
     std::string out;
     for(unsigned char c : s)
     {
-      if(isalnum(c) || c == '.' || c == '*' || c == '_' || c == '-') { out += c; }
+      if(ascii_alnum(c) || c == '.' || c == '*' || c == '_' || c == '-') { out += c; }
       else if(c == ' ') { out += '+'; }
       else { put_escaped(out, c); }
     }
