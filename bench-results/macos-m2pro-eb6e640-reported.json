@@ -1,0 +1,20 @@
+{
+  "label": "macos-m2pro-eb6e640",
+  "reported": true,
+  "source": "Figures quoted in README.md and commit eb6e640 (Mac session). Summary only: no per-request data, so no percentiles. Rerun `bb bench` on the Mac to replace this with a measured results file.",
+  "system": {
+    "cpu-model": "Apple M2 Pro",
+    "cpu-freq-note": "not recorded",
+    "ncpus": null,
+    "os": "macOS (version not recorded)",
+    "virtualization": "none",
+    "description": "Apple M2 Pro, macOS (CPU count, frequency and OS version not recorded)",
+    "git": {"sha": "eb6e640", "dirty": false}
+  },
+  "runs": [
+    {"mode": "100rps", "path": "/", "protocols": ["h1", "h2"], "rps": 100.0, "mean-ms": 0.6},
+    {"mode": "uncapped", "path": "/", "protocols": ["h1", "h2"], "rps": 43000, "clients": 50, "note": "~43k req/s on h1 and h2"},
+    {"mode": "uncapped", "path": "/add?a=1&b=2", "protocols": ["h1", "h2"], "rps": 25000, "clients": 50, "note": "~25k req/s on h1 and h2"}
+  ],
+  "kb-per-request": {"/": 9.7, "/add?a=1&b=2": 17}
+}

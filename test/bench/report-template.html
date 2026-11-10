@@ -1,0 +1,352 @@
+<title>go-brrrr Latency</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single reading column of figures, each a titled panel pair (h1 | h2) with
+   the system line in its legend; system cards and the numbers table at the end. */
+:root {
+  --bg: #f7f8f9;
+  --surface: #ffffff;
+  --ink: #101418;
+  --ink-2: #4a525b;
+  --ink-3: #6b7480;
+  --rule: #dde1e6;
+  --grid: #eceff2;
+  --s1: #2a78d6;  /* categorical slot 1: blue */
+  --s2: #eb6834;  /* slot 2: orange */
+  --s3: #1baf7a;  /* slot 3: aqua */
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121417; --surface: #1a1d21; --ink: #eef0f2; --ink-2: #b9c0c8; --ink-3: #8c95a0;
+    --rule: #2c3138; --grid: #23272d; --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121417; --surface: #1a1d21; --ink: #eef0f2; --ink-2: #b9c0c8; --ink-3: #8c95a0;
+  --rule: #2c3138; --grid: #23272d; --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.page { max-width: 1080px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px; }
+header { display: flex; flex-direction: column; gap: 8px; }
+h1 { font-size: 28px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 19px; font-weight: 600; margin: 0; text-wrap: balance; }
+h3 { font-size: 13px; font-weight: 500; margin: 0; color: var(--ink-2); font-family: var(--font-data); }
+p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+.caveat { font-size: 13px; color: var(--ink-3); }
+section { display: flex; flex-direction: column; gap: 14px; }
+.method { font-family: var(--font-data); font-size: 12px; color: var(--ink-3); }
+.legend { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.legend-item { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.swatch { width: 18px; height: 3px; border-radius: 2px; flex: none; transform: translateY(-3px); }
+.swatch.hatched { height: 10px; transform: translateY(1px); }
+.legend-name { font-family: var(--font-data); font-weight: 500; color: var(--ink); }
+.legend-sys { color: var(--ink-3); }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+svg { width: 100%; height: auto; display: block; overflow: visible; }
+svg text { fill: var(--ink-3); font-family: var(--font-data); font-size: 10px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 6px 8px; font-family: var(--font-data); font-size: 11px; color: var(--ink);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); white-space: nowrap; z-index: 2; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align: left; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+td { font-family: var(--font-data); font-size: 12px; }
+td.reported { color: var(--ink-3); font-style: italic; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 12px; }
+.card dt { color: var(--ink-3); }
+.card dd { margin: 0; font-family: var(--font-data); overflow-wrap: anywhere; }
+.badge { align-self: flex-start; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; color: var(--ink-2); }
+.empty { font-size: 13px; color: var(--ink-3); padding: 24px 0; text-align: center; }
+</style>
+
+<div class="page">
+  <header>
+    <h1>go-brrrr latency</h1>
+    <p>ring.adapter.h2o under h2load, per run and protocol. Latency is per request, from h2load's
+      per-request log, so percentiles mean the same thing on every platform and h2load version.</p>
+    <p class="caveat">Load generator and server share each machine, and the Linux runs are in a container
+      on a VM. Treat the numbers as relative within one machine, not as absolute capacity.</p>
+  </header>
+  <div id="figures" style="display:flex;flex-direction:column;gap:40px"></div>
+</div>
+
+<script id="bench-data" type="application/json">__BENCH_DATA__</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('bench-data').textContent);
+  const SERIES_VARS = ['--s1', '--s2', '--s3'];
+  const NS = 'http://www.w3.org/2000/svg';
+  const fig = document.getElementById('figures');
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // A series is one machine + one commit; its key is the label without the path suffix.
+  const seriesKey = (label) => label.replace(/-(root|add)$/, '');
+  const keys = [];
+  data.forEach((d) => { const k = seriesKey(d.label); if (!keys.includes(k)) keys.push(k); });
+  const colorOf = (label) => SERIES_VARS[keys.indexOf(seriesKey(label)) % SERIES_VARS.length];
+  const sysOf = {};
+  data.forEach((d) => { sysOf[seriesKey(d.label)] = d.system; });
+  const sysLine = (s) => s ? (s.description || s['cpu-model']) : '';
+  const measured = data.filter((d) => !d.reported);
+  const reported = data.filter((d) => d.reported);
+
+  function el(tag, attrs, parent, text) {
+    const e = tag.match(/^(svg|g|path|line|rect|circle|text|pattern|defs)$/) ? document.createElementNS(NS, tag) : document.createElement(tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const fmtMs = (v) => v == null ? '–' : v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : Math.round(v).toString();
+  const fmtRps = (v) => v == null ? '–' : v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0);
+
+  function section(title, method, keysShown, hatchedKeys) {
+    const s = el('section', {}, fig);
+    el('h2', {}, s, title);
+    if (method) el('div', { class: 'method' }, s, method);
+    const lg = el('div', { class: 'legend' }, s);
+    keysShown.forEach((k) => {
+      const it = el('div', { class: 'legend-item' }, lg);
+      const sw = el('span', { class: 'swatch' + (hatchedKeys && hatchedKeys.includes(k) ? ' hatched' : '') }, it);
+      const c = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
+      sw.style.background = hatchedKeys && hatchedKeys.includes(k)
+        ? `repeating-linear-gradient(45deg, ${c} 0 2px, transparent 2px 5px)` : c;
+      if (hatchedKeys && hatchedKeys.includes(k)) sw.style.border = `1px solid ${c}`;
+      el('span', { class: 'legend-name' }, it, k + (hatchedKeys && hatchedKeys.includes(k) ? ' (reported)' : ''));
+      el('span', { class: 'legend-sys' }, it, sysLine(sysOf[k]));
+    });
+    const panels = el('div', { class: 'panels' }, s);
+    return panels;
+  }
+
+  function tooltip(panel) {
+    const t = el('div', { class: 'tip' }, panel); t.hidden = true;
+    return {
+      show(html, x, y) { t.innerHTML = html; t.hidden = false;
+        const pw = panel.clientWidth; const tw = t.offsetWidth;
+        t.style.left = Math.min(Math.max(4, x + 12), pw - tw - 4) + 'px'; t.style.top = (y + 12) + 'px'; },
+      hide() { t.hidden = true; }
+    };
+  }
+
+  // ---- percentile curves: x = percentile on a "nines" scale, y = ms on a log scale ----
+  const nines = (p) => p >= 100 ? 6 : Math.min(6, -Math.log10(1 - p / 100));
+  function percentileChart(panel, title, runs) {
+    el('h3', {}, panel, title);
+    const W = 460, H = 250, L = 46, R = 12, T = 10, B = 34;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const pts = runs.flatMap((r) => r.pcts.map((q) => q.ms)).filter((v) => v > 0);
+    if (!pts.length) { el('div', { class: 'empty' }, panel, 'No data'); return; }
+    let lo = Math.pow(10, Math.floor(Math.log10(Math.min(...pts)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...pts))));
+    const x = (p) => L + (nines(p) / 6) * (W - L - R);
+    const y = (v) => T + (1 - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (H - T - B);
+    for (let d = lo; d <= hi * 1.0001; d *= 10) {
+      el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: css('--grid'), 'stroke-width': 1 }, svg);
+      el('text', { x: L - 6, y: y(d) + 3, 'text-anchor': 'end' }, svg, fmtMs(d) + 'ms');
+    }
+    [[0, '0'], [90, '90'], [99, '99'], [99.9, '99.9'], [99.99, '99.99'], [99.999, '99.999'], [100, 'max']].forEach(([p, lbl]) => {
+      el('line', { x1: x(p), x2: x(p), y1: T, y2: H - B, stroke: css('--grid'), 'stroke-width': 1 }, svg);
+      el('text', { x: x(p), y: H - B + 14, 'text-anchor': 'middle' }, svg, lbl);
+    });
+    el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, 'percentile');
+    const tip = tooltip(panel);
+    runs.forEach((r) => {
+      const c = css(colorOf(r.label));
+      const ps = r.pcts.filter((q) => q.ms > 0 && q.p <= 100 && (q.p === 100 || nines(q.p) < 6));
+      el('path', { d: ps.map((q, i) => (i ? 'L' : 'M') + x(q.p).toFixed(1) + ',' + y(q.ms).toFixed(1)).join(''),
+        fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+      ps.forEach((q) => {
+        const dot = el('circle', { cx: x(q.p), cy: y(q.ms), r: 3, fill: c, stroke: css('--surface'), 'stroke-width': 2 }, svg);
+        const hit = el('circle', { cx: x(q.p), cy: y(q.ms), r: 9, fill: 'transparent' }, svg);
+        hit.addEventListener('mouseenter', (e) => { const b = panel.getBoundingClientRect();
+          tip.show(`${seriesKey(r.label)}<br>p${q.p === 100 ? ' max' : q.p}: ${fmtMs(q.ms)}ms`, e.clientX - b.left, e.clientY - b.top); dot.setAttribute('r', 4.5); });
+        hit.addEventListener('mouseleave', () => { tip.hide(); dot.setAttribute('r', 3); });
+      });
+    });
+  }
+
+  // ---- per-second series: p99 (solid) and max (dashed) over the run ----
+  function timeChart(panel, title, runs) {
+    el('h3', {}, panel, title);
+    const W = 460, H = 220, L = 46, R = 12, T = 10, B = 34;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const all = runs.flatMap((r) => r.series.flatMap((s) => [s['p99-ms'], s['max-ms']])).filter((v) => v > 0);
+    if (!all.length) { el('div', { class: 'empty' }, panel, 'No data'); return; }
+    const tmax = Math.max(...runs.map((r) => r.series.length - 1), 1);
+    let lo = Math.pow(10, Math.floor(Math.log10(Math.min(...all)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...all))));
+    const x = (t) => L + (t / tmax) * (W - L - R);
+    const y = (v) => T + (1 - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (H - T - B);
+    for (let d = lo; d <= hi * 1.0001; d *= 10) {
+      el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: css('--grid') }, svg);
+      el('text', { x: L - 6, y: y(d) + 3, 'text-anchor': 'end' }, svg, fmtMs(d) + 'ms');
+    }
+    const step = tmax > 40 ? 10 : 5;
+    for (let t = 0; t <= tmax; t += step) el('text', { x: x(t), y: H - B + 14, 'text-anchor': 'middle' }, svg, t + 's');
+    el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, 'time into run · solid p99, dashed max');
+    const tip = tooltip(panel);
+    runs.forEach((r) => {
+      const c = css(colorOf(r.label));
+      [['p99-ms', ''], ['max-ms', '4 3']].forEach(([k, dash]) => {
+        const ps = r.series.filter((s) => s[k] > 0);
+        el('path', { d: ps.map((s, i) => (i ? 'L' : 'M') + x(s.t).toFixed(1) + ',' + y(s[k]).toFixed(1)).join(''),
+          fill: 'none', stroke: c, 'stroke-width': dash ? 1.5 : 2, 'stroke-dasharray': dash, opacity: dash ? 0.85 : 1 }, svg);
+      });
+    });
+    // crosshair: nearest second
+    const cross = el('line', { y1: T, y2: H - B, stroke: css('--ink-3'), 'stroke-width': 1, visibility: 'hidden' }, svg);
+    const hit = el('rect', { x: L, y: T, width: W - L - R, height: H - T - B, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', (e) => {
+      const b = svg.getBoundingClientRect(); const sx = (e.clientX - b.left) * (W / b.width);
+      const t = Math.max(0, Math.min(tmax, Math.round((sx - L) / (W - L - R) * tmax)));
+      cross.setAttribute('x1', x(t)); cross.setAttribute('x2', x(t)); cross.setAttribute('visibility', 'visible');
+      const rows = runs.map((r) => { const s = r.series.find((q) => q.t === t);
+        return s ? `${seriesKey(r.label)}: p99 ${fmtMs(s['p99-ms'])} · max ${fmtMs(s['max-ms'])}ms` : null; }).filter(Boolean);
+      const pb = panel.getBoundingClientRect(); tip.show(`${t}s<br>` + rows.join('<br>'), e.clientX - pb.left, e.clientY - pb.top);
+    });
+    hit.addEventListener('mouseleave', () => { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
+  }
+
+  // ---- throughput bars, grouped by path and protocol ----
+  function throughputChart(panel, title, groups) {
+    el('h3', {}, panel, title);
+    const n = groups.reduce((a, g) => a + g.bars.length, 0) + groups.length;
+    const W = 460, L = 132, R = 56, T = 4, rowH = 20, H = T + n * rowH + 22;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const defs = el('defs', {}, svg);
+    const max = Math.max(...groups.flatMap((g) => g.bars.map((b) => b.rps)), 1);
+    const x = (v) => L + (v / max) * (W - L - R);
+    const tip = tooltip(panel);
+    let row = 0;
+    groups.forEach((g) => {
+      el('text', { x: 0, y: T + row * rowH + 14, 'font-weight': 500, style: 'fill: var(--ink-2)' }, svg, g.name);
+      row++;
+      g.bars.forEach((b) => {
+        const c = css(colorOf(b.label)); const yb = T + row * rowH + 3;
+        let fill = c;
+        if (b.reported) {
+          const id = 'hatch-' + keys.indexOf(seriesKey(b.label));
+          if (!defs.querySelector('#' + id)) {
+            const pat = el('pattern', { id, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+            el('rect', { width: 2.5, height: 6, fill: c }, pat);
+          }
+          fill = `url(#${id})`;
+        }
+        el('text', { x: L - 6, y: yb + 11, 'text-anchor': 'end' }, svg, seriesKey(b.label).replace(/-[0-9a-f]{7}$/, ''));
+        const rect = el('rect', { x: L, y: yb, width: Math.max(1, x(b.rps) - L), height: 14, rx: 2, fill,
+          stroke: b.reported ? c : 'none', 'stroke-width': b.reported ? 1 : 0 }, svg);
+        el('text', { x: x(b.rps) + 4, y: yb + 11, style: 'fill: var(--ink-2)' }, svg, fmtRps(b.rps) + (b.reported ? '*' : ''));
+        rect.addEventListener('mouseenter', (e) => { const pb = panel.getBoundingClientRect();
+          tip.show(`${seriesKey(b.label)}<br>${g.name}: ${Math.round(b.rps).toLocaleString()} req/s${b.reported ? '<br>reported, approx.' : ''}`, e.clientX - pb.left, e.clientY - pb.top); });
+        rect.addEventListener('mouseleave', () => tip.hide());
+        row++;
+      });
+    });
+    el('text', { x: L, y: H - 4 }, svg, 'req/s' + (groups.some((g) => g.bars.some((b) => b.reported)) ? '  · * reported, approximate' : ''));
+  }
+
+  // ---- assemble ----
+  const pick = (mode, path) => measured.filter((d) => d.run.mode === mode && d.run.path === path);
+  const protos = ['h1', 'h2', 'h3'];
+  const resFor = (d, p) => (d.results || []).find((r) => r.protocol === p);
+  const asRun = (d, p) => { const r = resFor(d, p); return r && r.latency ? { label: d.label, pcts: r.latency.percentiles, series: r.latency['per-second'] } : null; };
+
+  const fixed = pick('100rps', '/');
+  if (fixed.length) {
+    const ks = [...new Set(fixed.map((d) => seriesKey(d.label)))];
+    const d0 = fixed[0].run;
+    const p1 = section('At a steady 100 req/s', `GET / · ${d0['duration-s']}s per protocol · ${d0.clients} clients × ${d0.rate / d0.clients} req/s · ${d0['load-generator']}`, ks);
+    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+      if (rs.length) percentileChart(el('div', { class: 'panel' }, p1), `${p} · latency by percentile`, rs); });
+    const p2 = section('Tail latency over the run', `Same runs: each second's p99 and slowest request`, ks);
+    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+      if (rs.length) timeChart(el('div', { class: 'panel' }, p2), `${p} · per-second p99 and max`, rs); });
+  }
+
+  const paths = [...new Set(data.flatMap((d) => d.reported ? d.runs.filter((r) => r.mode === 'uncapped').map((r) => r.path) : (d.run.mode === 'uncapped' ? [d.run.path] : [])))];
+  if (paths.length) {
+    const unc = measured.filter((d) => d.run.mode === 'uncapped');
+    const ks = [...new Set([...unc, ...reported].map((d) => seriesKey(d.label)))];
+    const d0 = unc[0] ? unc[0].run : {};
+    const p3 = section('Ceiling: uncapped throughput', `${d0.clients || 50} clients, ${d0.streams || 1} request in flight each · ${d0['duration-s'] || '?'}s per protocol and path`,
+      ks, reported.map((d) => seriesKey(d.label)));
+    const groups = [];
+    paths.forEach((path) => ['h1', 'h2'].forEach((p) => {
+      const bars = [];
+      unc.filter((d) => d.run.path === path).forEach((d) => { const r = resFor(d, p); if (r && r.rps) bars.push({ label: d.label, rps: r.rps }); });
+      reported.forEach((d) => d.runs.filter((r) => r.mode === 'uncapped' && r.path === path && r.protocols.includes(p))
+        .forEach((r) => bars.push({ label: d.label, rps: r.rps, reported: true })));
+      if (bars.length) groups.push({ name: `${p} ${path}`, bars });
+    }));
+    throughputChart(el('div', { class: 'panel' }, p3), 'requests per second', groups);
+    const unr = unc.filter((d) => d.run.path === '/');
+    if (unr.length) {
+      const p4 = section('Latency at the ceiling', 'GET /, uncapped runs above (measured runs only)', [...new Set(unr.map((d) => seriesKey(d.label)))]);
+      protos.forEach((p) => { const rs = unr.map((d) => asRun(d, p)).filter(Boolean);
+        if (rs.length) percentileChart(el('div', { class: 'panel' }, p4), `${p} · latency by percentile`, rs); });
+    }
+  }
+
+  // ---- numbers table ----
+  const ts = el('section', {}, fig);
+  el('h2', {}, ts, 'All runs');
+  const tw = el('div', { class: 'table-wrap' }, ts);
+  const tbl = el('table', {}, tw);
+  const hr = el('tr', {}, el('thead', {}, tbl));
+  ['run', 'mode · path', 'proto', 'req/s', 'p50 ms', 'p99 ms', 'p99.9 ms', 'max ms', 'mean ms', 'alloc/req', 'GCs'].forEach((h) => el('th', {}, hr, h));
+  const tb = el('tbody', {}, tbl);
+  measured.forEach((d) => (d.results || []).forEach((r) => {
+    const q = {}; (r.latency ? r.latency.percentiles : []).forEach((x) => { q[x.p] = x.ms; });
+    const tr = el('tr', {}, tb);
+    [seriesKey(d.label), `${d.run.mode} · ${d.run.path}`, r.protocol, r.rps ? r.rps.toFixed(1) : '–', fmtMs(q[50]), fmtMs(q[99]), fmtMs(q[99.9]), fmtMs(q[100]),
+      r.latency ? fmtMs(r.latency['mean-ms']) : '–', r['bytes-per-request'] ? (r['bytes-per-request'] / 1024).toFixed(1) + 'KB' : '–', r.gcs ?? '–']
+      .forEach((v) => el('td', {}, tr, v));
+  }));
+  reported.forEach((d) => d.runs.forEach((r) => {
+    const tr = el('tr', {}, tb); const kb = (d['kb-per-request'] || {})[r.path];
+    [seriesKey(d.label), `${r.mode} · ${r.path}`, r.protocols.join('+'), (r.mode === 'uncapped' ? '~' : '') + r.rps, '–', '–', '–', '–',
+      r['mean-ms'] != null ? '~' + r['mean-ms'] : '–', kb ? '~' + kb + 'KB' : '–', '–']
+      .forEach((v) => el('td', { class: 'reported' }, tr, v));
+  }));
+  if (reported.length) el('p', { class: 'caveat' }, ts, 'Italic rows are reported summaries (no per-request data): ' + reported.map((d) => d.source).join(' '));
+
+  // ---- systems ----
+  const ss = el('section', {}, fig);
+  el('h2', {}, ss, 'Systems');
+  const cards = el('div', { class: 'cards' }, ss);
+  keys.forEach((k) => {
+    const s = sysOf[k] || {}; const isRep = reported.some((d) => seriesKey(d.label) === k);
+    const c = el('div', { class: 'card' }, cards);
+    const h = el('div', { class: 'legend-item' }, c);
+    const sw = el('span', { class: 'swatch' }, h); sw.style.background = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
+    el('span', { class: 'legend-name' }, h, k);
+    if (isRep) el('span', { class: 'badge' }, c, 'reported, not measured here');
+    const dl = el('dl', {}, c);
+    const freq = s['cpu-max-mhz'] ? `${(s['cpu-max-mhz'] / 1000).toFixed(2)} GHz max` :
+      s['cpu-nominal-ghz'] ? `${s['cpu-nominal-ghz'].toFixed(2)} GHz nominal` + (s['cpu-current-mhz'] ? `, ${Math.round(s['cpu-current-mhz'])} MHz reported` : '') : '';
+    [['CPU', s['cpu-model']], ['Frequency', [freq, s['cpu-freq-note']].filter(Boolean).join('; ')],
+     ['CPUs', s.ncpus != null ? s.ncpus + (s['threads-per-core'] ? ` (${s['threads-per-core']} thread/core)` : '') +
+       (s['performance-cores'] ? ` (${s['performance-cores']}P + ${s['efficiency-cores']}E)` : '') : 'not recorded'],
+     ['OS', s.os], ['Arch', s.arch], ['Memory', s['memory-gb'] ? s['memory-gb'] + ' GB' : null],
+     ['Virtualisation', [s.hypervisor, s.virtualization].filter((v) => v && v !== 'none').join(', ') || 'none'],
+     ['cgroup CPU limit', s['cgroup-cpu-max']], ['h2load', s.h2load], ['jank', s.jank],
+     ['Commit', s.git ? s.git.sha + (s.git.dirty ? ' (dirty)' : '') : null]]
+      .filter(([, v]) => v).forEach(([k2, v]) => { el('dt', {}, dl, k2); el('dd', {}, dl, v); });
+  });
+})();
+</script>

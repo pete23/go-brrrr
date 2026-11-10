@@ -70,6 +70,11 @@
    :requires ([bench.load :as load])
    :task     (apply load/-main *command-line-args*)}
 
+  bench:report
+  {:doc      "Chart every results file in bench-results/ into bench-results/report.html"
+   :requires ([bench.report :as report])
+   :task     (apply report/-main *command-line-args*)}
+
   test
   {:doc     "All tests"
    :depends [test:unit test:integration test:app]}
