@@ -40,6 +40,7 @@
    :uncapped  {:coerce :boolean :desc "no rate limit: find the ceiling"}
    :streams   {:default 1 :coerce :long :desc "with --uncapped: requests in flight per client (h2load -m)"}
    :label     {:desc "name for this run in results and charts (default: OS and git sha)"}
+   :commit    {:desc "commit the server binary was built from (default: this checkout's, for the default binary)"}
    :out       {:default "bench-results" :desc "directory for the results JSON"}})
 
 ;; ---- latency from h2load's per-request log ----
@@ -201,6 +202,9 @@
                  :run {:timestamp stamp :mode mode :path (:path opts) :duration-s (:duration opts)
                        :clients (:clients opts) :rate (when-not (:uncapped opts) (:rate opts))
                        :streams (when (:uncapped opts) (:streams opts)) :binary (:binary opts)
+                       :server-commit (or (:commit opts)
+                                          (when (= (:binary opts) (get-in spec [:binary :default]))
+                                            (get-in sysinfo [:git :sha])))
                        :load-generator "h2load on the same host, 1 thread"}
                  :results (mapv #(dissoc % :max-bytes-per-request) results)}
                 {:pretty true}))

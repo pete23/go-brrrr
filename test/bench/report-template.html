@@ -101,7 +101,9 @@ td.reported { color: var(--ink-3); font-style: italic; }
   data.forEach((d) => { const k = seriesKey(d.label); if (!keys.includes(k)) keys.push(k); });
   const colorOf = (label) => SERIES_VARS[keys.indexOf(seriesKey(label)) % SERIES_VARS.length];
   const sysOf = {};
-  data.forEach((d) => { sysOf[seriesKey(d.label)] = d.system; });
+  const commitOf = {};
+  data.forEach((d) => { sysOf[seriesKey(d.label)] = d.system;
+    commitOf[seriesKey(d.label)] = (d.run && d.run['server-commit']) || (d.reported && d.system.git && d.system.git.sha); });
   const sysLine = (s) => s ? (s.description || s['cpu-model']) : '';
   const measured = data.filter((d) => !d.reported);
   const reported = data.filter((d) => d.reported);
@@ -226,7 +228,7 @@ td.reported { color: var(--ink-3); font-style: italic; }
   function throughputChart(panel, title, groups) {
     el('h3', {}, panel, title);
     const n = groups.reduce((a, g) => a + g.bars.length, 0) + groups.length;
-    const W = 460, L = 132, R = 56, T = 4, rowH = 20, H = T + n * rowH + 22;
+    const W = 960, L = 150, R = 70, T = 4, rowH = 20, H = T + n * rowH + 22;
     const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
     const defs = el('defs', {}, svg);
     const max = Math.max(...groups.flatMap((g) => g.bars.map((b) => b.rps)), 1);
@@ -345,7 +347,8 @@ td.reported { color: var(--ink-3); font-style: italic; }
      ['OS', s.os], ['Arch', s.arch], ['Memory', s['memory-gb'] ? s['memory-gb'] + ' GB' : null],
      ['Virtualisation', [s.hypervisor, s.virtualization].filter((v) => v && v !== 'none').join(', ') || 'none'],
      ['cgroup CPU limit', s['cgroup-cpu-max']], ['h2load', s.h2load], ['jank', s.jank],
-     ['Commit', s.git ? s.git.sha + (s.git.dirty ? ' (dirty)' : '') : null]]
+     ['Server commit', commitOf[k] || 'not recorded'],
+     ['Bench checkout', !isRep && s.git ? s.git.sha + (s.git.dirty ? ' (dirty)' : '') : null]]
       .filter(([, v]) => v).forEach(([k2, v]) => { el('dt', {}, dl, k2); el('dd', {}, dl, v); });
   });
 })();

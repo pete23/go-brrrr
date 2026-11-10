@@ -46,6 +46,7 @@ bb test:unit           # `lein test`: ported ring tests plus the adapter's pure 
 bb test:integration    # the adapter against test/server/echo.jank, over h1, h2 and h3
 bb test:app            # the app's endpoints, as the release binary and under the JIT
 bb bench               # load test: 60s at 100 req/s per protocol (see below)
+bb bench:report        # chart bench-results/*.json into bench-results/report.html
 bb tasks               # the rest
 ```
 
@@ -111,10 +112,40 @@ The allocation figure comes from the server: with `BRRRR_STATS` set in its envir
 bench sets it), `GET /_brrrr/stats` is answered by the adapter's C++ bridge, without reaching
 the handler, with the request count and the GC's allocated bytes, collections and heap size.
 
-Baselines: cloud VM, 4 vCPU: 100.00 req/s on h1 and h2, mean latency ~0.8ms, max ~17ms.
-M2 Pro (macOS): 100.00 req/s, mean ~0.6ms; `GET /` allocates ~9.7KB and `/add?a=1&b=2`
-~17KB per request; uncapped (`h2load -c 50`), ~43k req/s for `/` and ~25k for `/add` on h1
-and h2. Allocation is the limit: jank's GC takes a global lock to allocate.
+### Results and charts
+
+Each `bb bench` run writes `bench-results/<label>-<mode>-<timestamp>.json`: the system it ran
+on (CPU model, frequency, CPU count, OS, virtualisation, tool versions, the server's commit),
+the options, and per protocol the summary, latency percentiles and a per-second p50/p99/max
+series. Latency comes from h2load's per-request log (`--log-file`), so percentiles are
+computed the same way on every platform and h2load version. `bb bench:report` charts every
+results file into `bench-results/report.html`, keeping the newest file per label, mode and
+path.
+
+```bash
+bb bench --label macos-m2pro-$(git rev-parse --short HEAD)                     # 60s at 100 req/s
+bb bench --label macos-m2pro-$(git rev-parse --short HEAD)-root --uncapped --clients 50 --duration 30
+bb bench --label macos-m2pro-$(git rev-parse --short HEAD)-add --uncapped --clients 50 --duration 30 --path '/add?a=1&b=2'
+bb bench:report
+```
+
+A `-root` / `-add` suffix groups uncapped runs with the fixed-rate run of the same machine and
+commit. `--commit` records which commit a `--binary` other than the default was built from.
+
+Linux baselines (Intel Xeon @ 2.10GHz, 4 vCPU, KVM + Docker, Ubuntu 24.04; h2load on the
+same host), before and after the allocation work in `eb6e640`:
+
+| | `7a73b98` | `eb6e640` |
+|---|---|---|
+| 100 req/s, `/`, p50 / p99 (h1) | 0.47 / 1.97ms | 0.45 / 1.88ms |
+| 100 req/s, `/`, p50 / p99 (h2) | 0.43 / 2.42ms | 0.38 / 1.06ms |
+| uncapped `/` (h1 / h2) | 29.3k / 28.7k req/s | 48.5k / 58.5k req/s |
+| uncapped `/add?a=1&b=2` (h1 / h2) | 22.9k / 22.4k req/s | 34.1k / 31.8k req/s |
+
+M2 Pro (macOS), as reported, summary only: 100.00 req/s with mean ~0.6ms; `GET /` allocates
+~9.7KB and `/add?a=1&b=2` ~17KB per request; uncapped (`h2load -c 50`), ~43k req/s for `/`
+and ~25k for `/add` on h1 and h2. Allocation is the limit: jank's GC takes a global lock to
+allocate.
 
 For finding the ceiling rather than holding a rate, drop `--rps` and use h2load directly,
 e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or

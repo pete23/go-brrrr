@@ -1,0 +1,355 @@
+<title>go-brrrr Latency</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single reading column of figures, each a titled panel pair (h1 | h2) with
+   the system line in its legend; system cards and the numbers table at the end. */
+:root {
+  --bg: #f7f8f9;
+  --surface: #ffffff;
+  --ink: #101418;
+  --ink-2: #4a525b;
+  --ink-3: #6b7480;
+  --rule: #dde1e6;
+  --grid: #eceff2;
+  --s1: #2a78d6;  /* categorical slot 1: blue */
+  --s2: #eb6834;  /* slot 2: orange */
+  --s3: #1baf7a;  /* slot 3: aqua */
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121417; --surface: #1a1d21; --ink: #eef0f2; --ink-2: #b9c0c8; --ink-3: #8c95a0;
+    --rule: #2c3138; --grid: #23272d; --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121417; --surface: #1a1d21; --ink: #eef0f2; --ink-2: #b9c0c8; --ink-3: #8c95a0;
+  --rule: #2c3138; --grid: #23272d; --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.page { max-width: 1080px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px; }
+header { display: flex; flex-direction: column; gap: 8px; }
+h1 { font-size: 28px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 19px; font-weight: 600; margin: 0; text-wrap: balance; }
+h3 { font-size: 13px; font-weight: 500; margin: 0; color: var(--ink-2); font-family: var(--font-data); }
+p { margin: 0; max-width: 68ch; color: var(--ink-2); }
+.caveat { font-size: 13px; color: var(--ink-3); }
+section { display: flex; flex-direction: column; gap: 14px; }
+.method { font-family: var(--font-data); font-size: 12px; color: var(--ink-3); }
+.legend { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.legend-item { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.swatch { width: 18px; height: 3px; border-radius: 2px; flex: none; transform: translateY(-3px); }
+.swatch.hatched { height: 10px; transform: translateY(1px); }
+.legend-name { font-family: var(--font-data); font-weight: 500; color: var(--ink); }
+.legend-sys { color: var(--ink-3); }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 12px 6px;
+  display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+svg { width: 100%; height: auto; display: block; overflow: visible; }
+svg text { fill: var(--ink-3); font-family: var(--font-data); font-size: 10px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 6px 8px; font-family: var(--font-data); font-size: 11px; color: var(--ink);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); white-space: nowrap; z-index: 2; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align: left; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+td { font-family: var(--font-data); font-size: 12px; }
+td.reported { color: var(--ink-3); font-style: italic; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 12px; }
+.card dt { color: var(--ink-3); }
+.card dd { margin: 0; font-family: var(--font-data); overflow-wrap: anywhere; }
+.badge { align-self: flex-start; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+  border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; color: var(--ink-2); }
+.empty { font-size: 13px; color: var(--ink-3); padding: 24px 0; text-align: center; }
+</style>
+
+<div class="page">
+  <header>
+    <h1>go-brrrr latency</h1>
+    <p>ring.adapter.h2o under h2load, per run and protocol. Latency is per request, from h2load's
+      per-request log, so percentiles mean the same thing on every platform and h2load version.</p>
+    <p class="caveat">Load generator and server share each machine, and the Linux runs are in a container
+      on a VM. Treat the numbers as relative within one machine, not as absolute capacity.</p>
+  </header>
+  <div id="figures" style="display:flex;flex-direction:column;gap:40px"></div>
+</div>
+
+<script id="bench-data" type="application/json">[{"label":"linux-before-7a73b98","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"eb6e640","dirty":true},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"/tmp/claude-0/-home-user-go-brrrr/b1fb0ba6-2c32-5322-a8a1-64e1becd7139/scratchpad/before/target/release/go-brrrr","path":"/","clients":10,"mode":"100rps","streams":null,"load-generator":"h2load on the same host, 1 thread","rate":100,"server-commit":"7a73b98","duration-s":60,"timestamp":"20261110-032245"},"results":[{"rps":100.0,"exit":0,"protocol":"h1","target-rps":100,"gcs":null,"latency-ms":{"min":0.172,"max":6.4,"mean":0.556,"sd":0.381},"total":6000,"errored":0,"latency":{"count":6000,"percentiles":[{"p":0,"ms":0.172},{"p":10,"ms":0.293},{"p":25,"ms":0.356},{"p":50,"ms":0.467},{"p":75,"ms":0.671},{"p":90,"ms":0.855},{"p":95,"ms":0.965},{"p":97.5,"ms":1.109},{"p":99,"ms":1.968},{"p":99.5,"ms":3.156},{"p":99.9,"ms":4.531},{"p":99.95,"ms":4.93},{"p":99.99,"ms":6.395},{"p":99.999,"ms":6.395},{"p":100,"ms":6.395}],"mean-ms":0.556373,"per-second":[{"t":0,"count":101,"p50-ms":0.562,"p99-ms":2.735,"max-ms":3.037},{"t":1,"count":100,"p50-ms":0.454,"p99-ms":0.989,"max-ms":1.001},{"t":2,"count":99,"p50-ms":0.45,"p99-ms":1.171,"max-ms":1.171},{"t":3,"count":100,"p50-ms":0.541,"p99-ms":3.984,"max-ms":4.002},{"t":4,"count":100,"p50-ms":0.451,"p99-ms":0.979,"max-ms":0.992},{"t":5,"count":101,"p50-ms":0.449,"p99-ms":2.531,"max-ms":3.941},{"t":6,"count":100,"p50-ms":0.448,"p99-ms":0.88,"max-ms":0.941},{"t":7,"count":100,"p50-ms":0.476,"p99-ms":1.12,"max-ms":1.218},{"t":8,"count":100,"p50-ms":0.436,"p99-ms":1.096,"max-ms":1.1},{"t":9,"count":99,"p50-ms":0.515,"p99-ms":3.156,"max-ms":3.156},{"t":10,"count":100,"p50-ms":0.496,"p99-ms":1.198,"max-ms":1.207},{"t":11,"count":101,"p50-ms":0.53,"p99-ms":4.003,"max-ms":4.016},{"t":12,"count":100,"p50-ms":0.421,"p99-ms":1.29,"max-ms":1.298},{"t":13,"count":99,"p50-ms":0.622,"p99-ms":2.725,"max-ms":2.725},{"t":14,"count":100,"p50-ms":0.412,"p99-ms":1.38,"max-ms":1.968},{"t":15,"count":100,"p50-ms":0.499,"p99-ms":1.033,"max-ms":1.085},{"t":16,"count":101,"p50-ms":0.468,"p99-ms":1.022,"max-ms":1.041},{"t":17,"count":100,"p50-ms":0.439,"p99-ms":0.871,"max-ms":3.979},{"t":18,"count":100,"p50-ms":0.466,"p99-ms":1.184,"max-ms":3.848},{"t":19,"count":99,"p50-ms":0.421,"p99-ms":0.93,"max-ms":0.93},{"t":20,"count":101,"p50-ms":0.434,"p99-ms":0.999,"max-ms":1.001},{"t":21,"count":99,"p50-ms":0.381,"p99-ms":0.725,"max-ms":0.725},{"t":22,"count":101,"p50-ms":0.521,"p99-ms":1.36,"max-ms":1.372},{"t":23,"count":99,"p50-ms":0.38,"p99-ms":1.139,"max-ms":1.139},{"t":24,"count":101,"p50-ms":0.48,"p99-ms":4.501,"max-ms":4.531},{"t":25,"count":99,"p50-ms":0.449,"p99-ms":1.222,"max-ms":1.222},{"t":26,"count":101,"p50-ms":0.443,"p99-ms":2.184,"max-ms":2.199},{"t":27,"count":99,"p50-ms":0.477,"p99-ms":0.981,"max-ms":0.981},{"t":28,"count":100,"p50-ms":0.467,"p99-ms":1.005,"max-ms":1.013},{"t":29,"count":101,"p50-ms":0.441,"p99-ms":1.368,"max-ms":1.378},{"t":30,"count":100,"p50-ms":0.432,"p99-ms":3.802,"max-ms":3.892},{"t":31,"count":99,"p50-ms":0.423,"p99-ms":0.829,"max-ms":0.829},{"t":32,"count":101,"p50-ms":0.513,"p99-ms":0.918,"max-ms":0.93},{"t":33,"count":99,"p50-ms":0.469,"p99-ms":1.332,"max-ms":1.332},{"t":34,"count":101,"p50-ms":0.517,"p99-ms":0.999,"max-ms":3.019},{"t":35,"count":100,"p50-ms":0.42,"p99-ms":0.786,"max-ms":0.825},{"t":36,"count":99,"p50-ms":0.467,"p99-ms":4.951,"max-ms":4.951},{"t":37,"count":100,"p50-ms":0.415,"p99-ms":1.044,"max-ms":1.051},{"t":38,"count":101,"p50-ms":0.551,"p99-ms":1.096,"max-ms":1.103},{"t":39,"count":100,"p50-ms":0.449,"p99-ms":1.302,"max-ms":1.33},{"t":40,"count":100,"p50-ms":0.492,"p99-ms":1.09,"max-ms":1.173},{"t":41,"count":100,"p50-ms":0.451,"p99-ms":1.291,"max-ms":1.336},{"t":42,"count":100,"p50-ms":0.529,"p99-ms":3.958,"max-ms":3.971},{"t":43,"count":100,"p50-ms":0.5,"p99-ms":0.877,"max-ms":0.891},{"t":44,"count":100,"p50-ms":0.479,"p99-ms":2.849,"max-ms":6.395},{"t":45,"count":100,"p50-ms":0.414,"p99-ms":0.907,"max-ms":0.912},{"t":46,"count":99,"p50-ms":0.49,"p99-ms":1.697,"max-ms":1.697},{"t":47,"count":101,"p50-ms":0.484,"p99-ms":1.023,"max-ms":1.03},{"t":48,"count":99,"p50-ms":0.494,"p99-ms":4.123,"max-ms":4.123},{"t":49,"count":101,"p50-ms":0.517,"p99-ms":1.13,"max-ms":2.781},{"t":50,"count":99,"p50-ms":0.479,"p99-ms":1.192,"max-ms":1.192},{"t":51,"count":101,"p50-ms":0.55,"p99-ms":1.204,"max-ms":1.248},{"t":52,"count":100,"p50-ms":0.429,"p99-ms":1.003,"max-ms":1.01},{"t":53,"count":99,"p50-ms":0.452,"p99-ms":1.024,"max-ms":1.024},{"t":54,"count":101,"p50-ms":0.505,"p99-ms":4.288,"max-ms":4.319},{"t":55,"count":100,"p50-ms":0.465,"p99-ms":0.976,"max-ms":2.441},{"t":56,"count":100,"p50-ms":0.369,"p99-ms":0.814,"max-ms":0.834},{"t":57,"count":100,"p50-ms":0.455,"p99-ms":1.222,"max-ms":1.231},{"t":58,"count":100,"p50-ms":0.458,"p99-ms":1.342,"max-ms":1.684},{"t":59,"count":99,"p50-ms":0.485,"p99-ms":1.108,"max-ms":1.108}]},"status-2xx":6000,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":6000},{"rps":100.0,"exit":0,"protocol":"h2","target-rps":100,"gcs":null,"latency-ms":{"min":0.151,"max":13.26,"mean":0.493,"sd":0.509},"total":6000,"errored":0,"latency":{"count":6000,"percentiles":[{"p":0,"ms":0.151},{"p":10,"ms":0.275},{"p":25,"ms":0.337},{"p":50,"ms":0.428},{"p":75,"ms":0.543},{"p":90,"ms":0.651},{"p":95,"ms":0.73},{"p":97.5,"ms":0.844},{"p":99,"ms":2.416},{"p":99.5,"ms":3.955},{"p":99.9,"ms":8.392},{"p":99.95,"ms":8.566},{"p":99.99,"ms":13.259},{"p":99.999,"ms":13.259},{"p":100,"ms":13.259}],"mean-ms":0.4932398333333333,"per-second":[{"t":0,"count":106,"p50-ms":0.479,"p99-ms":2.416,"max-ms":4.737},{"t":1,"count":100,"p50-ms":0.391,"p99-ms":0.778,"max-ms":0.789},{"t":2,"count":100,"p50-ms":0.394,"p99-ms":0.863,"max-ms":0.903},{"t":3,"count":100,"p50-ms":0.412,"p99-ms":0.679,"max-ms":0.717},{"t":4,"count":100,"p50-ms":0.407,"p99-ms":0.751,"max-ms":0.8},{"t":5,"count":100,"p50-ms":0.434,"p99-ms":0.722,"max-ms":0.792},{"t":6,"count":100,"p50-ms":0.429,"p99-ms":4.293,"max-ms":4.355},{"t":7,"count":100,"p50-ms":0.412,"p99-ms":0.854,"max-ms":1.877},{"t":8,"count":100,"p50-ms":0.397,"p99-ms":0.645,"max-ms":0.682},{"t":9,"count":100,"p50-ms":0.431,"p99-ms":0.745,"max-ms":0.746},{"t":10,"count":100,"p50-ms":0.406,"p99-ms":1.41,"max-ms":1.431},{"t":11,"count":100,"p50-ms":0.517,"p99-ms":13.118,"max-ms":13.259},{"t":12,"count":100,"p50-ms":0.539,"p99-ms":4.572,"max-ms":4.643},{"t":13,"count":100,"p50-ms":0.453,"p99-ms":0.814,"max-ms":0.83},{"t":14,"count":100,"p50-ms":0.406,"p99-ms":0.722,"max-ms":0.739},{"t":15,"count":100,"p50-ms":0.401,"p99-ms":0.715,"max-ms":0.728},{"t":16,"count":100,"p50-ms":0.387,"p99-ms":0.735,"max-ms":0.843},{"t":17,"count":100,"p50-ms":0.427,"p99-ms":0.789,"max-ms":0.849},{"t":18,"count":100,"p50-ms":0.495,"p99-ms":5.224,"max-ms":5.24},{"t":19,"count":100,"p50-ms":0.439,"p99-ms":0.716,"max-ms":0.77},{"t":20,"count":100,"p50-ms":0.435,"p99-ms":0.985,"max-ms":0.998},{"t":21,"count":100,"p50-ms":0.422,"p99-ms":0.773,"max-ms":0.796},{"t":22,"count":100,"p50-ms":0.396,"p99-ms":0.734,"max-ms":0.853},{"t":23,"count":100,"p50-ms":0.394,"p99-ms":0.728,"max-ms":0.773},{"t":24,"count":100,"p50-ms":0.404,"p99-ms":4.397,"max-ms":4.476},{"t":25,"count":100,"p50-ms":0.412,"p99-ms":0.721,"max-ms":0.738},{"t":26,"count":100,"p50-ms":0.391,"p99-ms":0.628,"max-ms":2.117},{"t":27,"count":100,"p50-ms":0.422,"p99-ms":0.708,"max-ms":0.738},{"t":28,"count":100,"p50-ms":0.38,"p99-ms":0.861,"max-ms":0.863},{"t":29,"count":100,"p50-ms":0.451,"p99-ms":0.792,"max-ms":0.852},{"t":30,"count":100,"p50-ms":0.457,"p99-ms":3.928,"max-ms":3.952},{"t":31,"count":100,"p50-ms":0.398,"p99-ms":0.805,"max-ms":0.866},{"t":32,"count":100,"p50-ms":0.384,"p99-ms":0.779,"max-ms":0.819},{"t":33,"count":100,"p50-ms":0.449,"p99-ms":0.764,"max-ms":0.815},{"t":34,"count":100,"p50-ms":0.439,"p99-ms":2.79,"max-ms":2.814},{"t":35,"count":100,"p50-ms":0.43,"p99-ms":0.73,"max-ms":0.758},{"t":36,"count":100,"p50-ms":0.429,"p99-ms":4.685,"max-ms":4.79},{"t":37,"count":100,"p50-ms":0.431,"p99-ms":1.087,"max-ms":1.132},{"t":38,"count":100,"p50-ms":0.465,"p99-ms":2.331,"max-ms":3.272},{"t":39,"count":100,"p50-ms":0.382,"p99-ms":0.89,"max-ms":1.008},{"t":40,"count":100,"p50-ms":0.423,"p99-ms":0.779,"max-ms":0.782},{"t":41,"count":100,"p50-ms":0.425,"p99-ms":1.626,"max-ms":1.63},{"t":42,"count":100,"p50-ms":0.462,"p99-ms":3.944,"max-ms":4.264},{"t":43,"count":100,"p50-ms":0.407,"p99-ms":0.69,"max-ms":0.737},{"t":44,"count":100,"p50-ms":0.401,"p99-ms":0.666,"max-ms":0.719},{"t":45,"count":100,"p50-ms":0.413,"p99-ms":0.798,"max-ms":0.83},{"t":46,"count":100,"p50-ms":0.373,"p99-ms":1.063,"max-ms":1.082},{"t":47,"count":100,"p50-ms":0.42,"p99-ms":2.769,"max-ms":3.238},{"t":48,"count":100,"p50-ms":0.401,"p99-ms":0.712,"max-ms":0.758},{"t":49,"count":100,"p50-ms":0.446,"p99-ms":4.198,"max-ms":4.212},{"t":50,"count":100,"p50-ms":0.394,"p99-ms":2.688,"max-ms":2.703},{"t":51,"count":100,"p50-ms":0.432,"p99-ms":0.756,"max-ms":1.153},{"t":52,"count":100,"p50-ms":0.484,"p99-ms":0.808,"max-ms":0.82},{"t":53,"count":100,"p50-ms":0.453,"p99-ms":3.791,"max-ms":3.842},{"t":54,"count":100,"p50-ms":0.435,"p99-ms":0.8,"max-ms":1.178},{"t":55,"count":100,"p50-ms":0.473,"p99-ms":3.968,"max-ms":3.981},{"t":56,"count":100,"p50-ms":0.418,"p99-ms":1.022,"max-ms":1.158},{"t":57,"count":100,"p50-ms":0.433,"p99-ms":0.756,"max-ms":2.276},{"t":58,"count":100,"p50-ms":0.469,"p99-ms":0.696,"max-ms":0.731},{"t":59,"count":94,"p50-ms":0.463,"p99-ms":0.93,"max-ms":0.93}]},"status-2xx":6000,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":6000}]},{"label":"linux-before-7a73b98-root","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"eb6e640","dirty":true},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"/tmp/claude-0/-home-user-go-brrrr/b1fb0ba6-2c32-5322-a8a1-64e1becd7139/scratchpad/before/target/release/go-brrrr","path":"/","clients":50,"mode":"uncapped","streams":1,"load-generator":"h2load on the same host, 1 thread","rate":null,"server-commit":"7a73b98","duration-s":30,"timestamp":"20261110-032352"},"results":[{"rps":29255.63,"exit":0,"protocol":"h1","target-rps":null,"gcs":null,"latency-ms":{"min":0.197,"max":28.68,"mean":1.71,"sd":1.17},"total":877669,"errored":0,"latency":{"count":877669,"percentiles":[{"p":0,"ms":0.197},{"p":10,"ms":0.796},{"p":25,"ms":1.105},{"p":50,"ms":1.411},{"p":75,"ms":1.765},{"p":90,"ms":3.264},{"p":95,"ms":4.365},{"p":97.5,"ms":4.982},{"p":99,"ms":6.01},{"p":99.5,"ms":7.268},{"p":99.9,"ms":10.129},{"p":99.95,"ms":11.398},{"p":99.99,"ms":14.887},{"p":99.999,"ms":18.974},{"p":100,"ms":28.675}],"mean-ms":1.706670375733904,"per-second":[{"t":0,"count":28979,"p50-ms":1.426,"p99-ms":5.824,"max-ms":18.708},{"t":1,"count":29194,"p50-ms":1.421,"p99-ms":5.892,"max-ms":12.343},{"t":2,"count":29496,"p50-ms":1.418,"p99-ms":5.859,"max-ms":11.946},{"t":3,"count":30182,"p50-ms":1.386,"p99-ms":5.495,"max-ms":14.228},{"t":4,"count":29856,"p50-ms":1.386,"p99-ms":5.717,"max-ms":13.521},{"t":5,"count":29580,"p50-ms":1.407,"p99-ms":5.569,"max-ms":16.757},{"t":6,"count":30265,"p50-ms":1.388,"p99-ms":5.57,"max-ms":16.368},{"t":7,"count":30715,"p50-ms":1.376,"p99-ms":5.655,"max-ms":13.631},{"t":8,"count":28594,"p50-ms":1.437,"p99-ms":5.85,"max-ms":14.722},{"t":9,"count":30367,"p50-ms":1.377,"p99-ms":5.397,"max-ms":13.177},{"t":10,"count":29952,"p50-ms":1.366,"p99-ms":6.083,"max-ms":16.449},{"t":11,"count":30526,"p50-ms":1.36,"p99-ms":5.616,"max-ms":13.161},{"t":12,"count":30595,"p50-ms":1.35,"p99-ms":5.861,"max-ms":14.887},{"t":13,"count":26860,"p50-ms":1.494,"p99-ms":7.196,"max-ms":19.144},{"t":14,"count":29654,"p50-ms":1.397,"p99-ms":5.674,"max-ms":14.267},{"t":15,"count":30086,"p50-ms":1.39,"p99-ms":5.954,"max-ms":13.731},{"t":16,"count":29909,"p50-ms":1.399,"p99-ms":5.66,"max-ms":14.658},{"t":17,"count":29233,"p50-ms":1.412,"p99-ms":6.094,"max-ms":15.692},{"t":18,"count":27101,"p50-ms":1.525,"p99-ms":6.176,"max-ms":17.873},{"t":19,"count":28401,"p50-ms":1.482,"p99-ms":5.901,"max-ms":12.767},{"t":20,"count":27368,"p50-ms":1.463,"p99-ms":7.237,"max-ms":12.929},{"t":21,"count":28847,"p50-ms":1.417,"p99-ms":6.281,"max-ms":13.606},{"t":22,"count":28256,"p50-ms":1.47,"p99-ms":6.474,"max-ms":14.163},{"t":23,"count":30237,"p50-ms":1.377,"p99-ms":6.108,"max-ms":16.99},{"t":24,"count":28371,"p50-ms":1.441,"p99-ms":6.269,"max-ms":13.678},{"t":25,"count":27898,"p50-ms":1.469,"p99-ms":6.181,"max-ms":14.794},{"t":26,"count":28717,"p50-ms":1.435,"p99-ms":6.378,"max-ms":16.132},{"t":27,"count":30663,"p50-ms":1.347,"p99-ms":6.072,"max-ms":16.019},{"t":28,"count":29956,"p50-ms":1.393,"p99-ms":5.972,"max-ms":16.081},{"t":29,"count":27811,"p50-ms":1.455,"p99-ms":6.632,"max-ms":28.675}]},"status-2xx":877669,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":877669},{"rps":28676.93,"exit":0,"protocol":"h2","target-rps":null,"gcs":null,"latency-ms":{"min":0.114,"max":32.02,"mean":1.68,"sd":1.18},"total":860308,"errored":0,"latency":{"count":860308,"percentiles":[{"p":0,"ms":0.114},{"p":10,"ms":0.771},{"p":25,"ms":1.066},{"p":50,"ms":1.396},{"p":75,"ms":1.759},{"p":90,"ms":3.193},{"p":95,"ms":4.381},{"p":97.5,"ms":5.02},{"p":99,"ms":6.051},{"p":99.5,"ms":7.331},{"p":99.9,"ms":10.202},{"p":99.95,"ms":11.459},{"p":99.99,"ms":14.53},{"p":99.999,"ms":20.614},{"p":100,"ms":32.021}],"mean-ms":1.683404930559753,"per-second":[{"t":0,"count":28492,"p50-ms":1.42,"p99-ms":5.921,"max-ms":14.536},{"t":1,"count":28747,"p50-ms":1.391,"p99-ms":6.191,"max-ms":13.937},{"t":2,"count":28279,"p50-ms":1.403,"p99-ms":5.872,"max-ms":32.021},{"t":3,"count":29356,"p50-ms":1.365,"p99-ms":6.122,"max-ms":15.33},{"t":4,"count":27943,"p50-ms":1.438,"p99-ms":6.178,"max-ms":11.497},{"t":5,"count":30484,"p50-ms":1.298,"p99-ms":5.978,"max-ms":13.121},{"t":6,"count":29196,"p50-ms":1.393,"p99-ms":5.843,"max-ms":11.966},{"t":7,"count":28272,"p50-ms":1.414,"p99-ms":6.106,"max-ms":16.267},{"t":8,"count":30421,"p50-ms":1.32,"p99-ms":5.743,"max-ms":13.967},{"t":9,"count":30359,"p50-ms":1.304,"p99-ms":5.811,"max-ms":14.378},{"t":10,"count":29314,"p50-ms":1.374,"p99-ms":5.653,"max-ms":12.887},{"t":11,"count":27557,"p50-ms":1.482,"p99-ms":6.016,"max-ms":21.587},{"t":12,"count":28226,"p50-ms":1.398,"p99-ms":6.157,"max-ms":12.241},{"t":13,"count":27468,"p50-ms":1.457,"p99-ms":6.325,"max-ms":15.837},{"t":14,"count":28567,"p50-ms":1.409,"p99-ms":6.027,"max-ms":11.207},{"t":15,"count":29285,"p50-ms":1.386,"p99-ms":5.753,"max-ms":13.892},{"t":16,"count":29295,"p50-ms":1.351,"p99-ms":6.568,"max-ms":16.78},{"t":17,"count":27685,"p50-ms":1.412,"p99-ms":7.089,"max-ms":15.698},{"t":18,"count":29216,"p50-ms":1.416,"p99-ms":5.637,"max-ms":13.354},{"t":19,"count":28984,"p50-ms":1.394,"p99-ms":5.774,"max-ms":15.526},{"t":20,"count":28749,"p50-ms":1.392,"p99-ms":6.023,"max-ms":17.498},{"t":21,"count":29333,"p50-ms":1.362,"p99-ms":6.052,"max-ms":13.981},{"t":22,"count":29019,"p50-ms":1.385,"p99-ms":6.206,"max-ms":12.405},{"t":23,"count":29115,"p50-ms":1.33,"p99-ms":6.729,"max-ms":27.832},{"t":24,"count":28888,"p50-ms":1.405,"p99-ms":5.644,"max-ms":13.312},{"t":25,"count":27968,"p50-ms":1.421,"p99-ms":6.018,"max-ms":12.922},{"t":26,"count":27090,"p50-ms":1.477,"p99-ms":5.976,"max-ms":15.584},{"t":27,"count":28332,"p50-ms":1.416,"p99-ms":6.045,"max-ms":15.185},{"t":28,"count":27995,"p50-ms":1.399,"p99-ms":6.845,"max-ms":20.787},{"t":29,"count":26673,"p50-ms":1.497,"p99-ms":6.197,"max-ms":11.84}]},"status-2xx":860308,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":860308}]},{"label":"linux-before-7a73b98-add","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"d12b45a","dirty":false},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"/tmp/claude-0/-home-user-go-brrrr/b1fb0ba6-2c32-5322-a8a1-64e1becd7139/scratchpad/before/target/release/go-brrrr","path":"/add?a=1&b=2","clients":50,"mode":"uncapped","streams":1,"load-generator":"h2load on the same host, 1 thread","rate":null,"server-commit":"7a73b98","duration-s":30,"timestamp":"20261110-032457"},"results":[{"rps":22893.3,"exit":0,"protocol":"h1","target-rps":null,"gcs":null,"latency-ms":{"min":0.228,"max":26.58,"mean":2.18,"sd":1.31},"total":686799,"errored":0,"latency":{"count":686799,"percentiles":[{"p":0,"ms":0.228},{"p":10,"ms":1.201},{"p":25,"ms":1.425},{"p":50,"ms":1.797},{"p":75,"ms":2.296},{"p":90,"ms":4.216},{"p":95,"ms":4.99},{"p":97.5,"ms":5.655},{"p":99,"ms":6.928},{"p":99.5,"ms":8.317},{"p":99.9,"ms":11.192},{"p":99.95,"ms":12.648},{"p":99.99,"ms":15.515},{"p":99.999,"ms":20.927},{"p":100,"ms":26.58}],"mean-ms":2.181007968852605,"per-second":[{"t":0,"count":20124,"p50-ms":2.032,"p99-ms":7.733,"max-ms":26.58},{"t":1,"count":20561,"p50-ms":2.018,"p99-ms":7.375,"max-ms":14.974},{"t":2,"count":21692,"p50-ms":1.918,"p99-ms":7.108,"max-ms":15.654},{"t":3,"count":23370,"p50-ms":1.769,"p99-ms":6.75,"max-ms":19.197},{"t":4,"count":22345,"p50-ms":1.84,"p99-ms":6.856,"max-ms":15.599},{"t":5,"count":22900,"p50-ms":1.722,"p99-ms":8.462,"max-ms":19.823},{"t":6,"count":22194,"p50-ms":1.858,"p99-ms":7.146,"max-ms":17.943},{"t":7,"count":22521,"p50-ms":1.828,"p99-ms":6.891,"max-ms":16.527},{"t":8,"count":22785,"p50-ms":1.801,"p99-ms":7.169,"max-ms":15.521},{"t":9,"count":23065,"p50-ms":1.798,"p99-ms":6.493,"max-ms":13.818},{"t":10,"count":23470,"p50-ms":1.774,"p99-ms":6.749,"max-ms":13.637},{"t":11,"count":23071,"p50-ms":1.795,"p99-ms":6.417,"max-ms":12.367},{"t":12,"count":24477,"p50-ms":1.677,"p99-ms":6.566,"max-ms":16.985},{"t":13,"count":23778,"p50-ms":1.72,"p99-ms":6.666,"max-ms":15.392},{"t":14,"count":22994,"p50-ms":1.819,"p99-ms":6.721,"max-ms":11.834},{"t":15,"count":23395,"p50-ms":1.772,"p99-ms":6.526,"max-ms":12.783},{"t":16,"count":23047,"p50-ms":1.793,"p99-ms":6.938,"max-ms":14.408},{"t":17,"count":23028,"p50-ms":1.798,"p99-ms":6.619,"max-ms":20.979},{"t":18,"count":22704,"p50-ms":1.837,"p99-ms":7.037,"max-ms":16.259},{"t":19,"count":22808,"p50-ms":1.771,"p99-ms":7.098,"max-ms":22.949},{"t":20,"count":23517,"p50-ms":1.706,"p99-ms":7.018,"max-ms":19.998},{"t":21,"count":23541,"p50-ms":1.731,"p99-ms":6.823,"max-ms":20.583},{"t":22,"count":22924,"p50-ms":1.846,"p99-ms":6.187,"max-ms":15.489},{"t":23,"count":23538,"p50-ms":1.776,"p99-ms":6.179,"max-ms":14.785},{"t":24,"count":22094,"p50-ms":1.878,"p99-ms":7.054,"max-ms":14.864},{"t":25,"count":21967,"p50-ms":1.877,"p99-ms":7.186,"max-ms":16.253},{"t":26,"count":23431,"p50-ms":1.753,"p99-ms":6.373,"max-ms":13.308},{"t":27,"count":24835,"p50-ms":1.583,"p99-ms":8.101,"max-ms":20.927},{"t":28,"count":22764,"p50-ms":1.787,"p99-ms":7.27,"max-ms":15.694},{"t":29,"count":23859,"p50-ms":1.701,"p99-ms":6.551,"max-ms":15.145}]},"status-2xx":686799,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":686799},{"rps":22426.53,"exit":0,"protocol":"h2","target-rps":null,"gcs":null,"latency-ms":{"min":0.139,"max":23.08,"mean":2.19,"sd":1.28},"total":672796,"errored":0,"latency":{"count":672796,"percentiles":[{"p":0,"ms":0.139},{"p":10,"ms":1.233},{"p":25,"ms":1.498},{"p":50,"ms":1.807},{"p":75,"ms":2.26},{"p":90,"ms":4.258},{"p":95,"ms":4.999},{"p":97.5,"ms":5.663},{"p":99,"ms":6.852},{"p":99.5,"ms":8.12},{"p":99.9,"ms":10.292},{"p":99.95,"ms":11.499},{"p":99.99,"ms":14.325},{"p":99.999,"ms":18.978},{"p":100,"ms":23.078}],"mean-ms":2.187755157581198,"per-second":[{"t":0,"count":22181,"p50-ms":1.873,"p99-ms":6.482,"max-ms":13.253},{"t":1,"count":22297,"p50-ms":1.83,"p99-ms":6.602,"max-ms":13.332},{"t":2,"count":21809,"p50-ms":1.903,"p99-ms":6.458,"max-ms":13.914},{"t":3,"count":21317,"p50-ms":1.891,"p99-ms":7.339,"max-ms":14.883},{"t":4,"count":21733,"p50-ms":1.843,"p99-ms":6.915,"max-ms":14.3},{"t":5,"count":21589,"p50-ms":1.919,"p99-ms":6.212,"max-ms":12.949},{"t":6,"count":22079,"p50-ms":1.859,"p99-ms":6.732,"max-ms":12.987},{"t":7,"count":22084,"p50-ms":1.855,"p99-ms":6.724,"max-ms":13.97},{"t":8,"count":21763,"p50-ms":1.881,"p99-ms":7.347,"max-ms":13.681},{"t":9,"count":21976,"p50-ms":1.85,"p99-ms":6.772,"max-ms":14.325},{"t":10,"count":22450,"p50-ms":1.807,"p99-ms":7.114,"max-ms":16.613},{"t":11,"count":23149,"p50-ms":1.774,"p99-ms":6.736,"max-ms":17.786},{"t":12,"count":23552,"p50-ms":1.736,"p99-ms":6.516,"max-ms":17.523},{"t":13,"count":22388,"p50-ms":1.834,"p99-ms":6.778,"max-ms":16.951},{"t":14,"count":23417,"p50-ms":1.724,"p99-ms":6.85,"max-ms":15.797},{"t":15,"count":23285,"p50-ms":1.704,"p99-ms":7.343,"max-ms":12.848},{"t":16,"count":22925,"p50-ms":1.74,"p99-ms":7.024,"max-ms":12.495},{"t":17,"count":22583,"p50-ms":1.797,"p99-ms":6.821,"max-ms":12.357},{"t":18,"count":23307,"p50-ms":1.75,"p99-ms":6.587,"max-ms":14.957},{"t":19,"count":22036,"p50-ms":1.844,"p99-ms":7.289,"max-ms":13.304},{"t":20,"count":22113,"p50-ms":1.81,"p99-ms":6.714,"max-ms":19.474},{"t":21,"count":22402,"p50-ms":1.805,"p99-ms":7.267,"max-ms":12.931},{"t":22,"count":23264,"p50-ms":1.748,"p99-ms":6.816,"max-ms":13.555},{"t":23,"count":23549,"p50-ms":1.697,"p99-ms":6.516,"max-ms":19.64},{"t":24,"count":23543,"p50-ms":1.739,"p99-ms":7.141,"max-ms":12.95},{"t":25,"count":21255,"p50-ms":1.887,"p99-ms":7.47,"max-ms":14.935},{"t":26,"count":22905,"p50-ms":1.776,"p99-ms":6.744,"max-ms":13.612},{"t":27,"count":21618,"p50-ms":1.844,"p99-ms":7.014,"max-ms":11.949},{"t":28,"count":22617,"p50-ms":1.76,"p99-ms":7.092,"max-ms":23.078},{"t":29,"count":21610,"p50-ms":1.835,"p99-ms":6.898,"max-ms":14.234}]},"status-2xx":672796,"timeout":0,"bytes-per-request":null,"failed":0,"succeeded":672796}]},{"label":"linux-after-eb6e640","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"d12b45a","dirty":false},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"target/release/go-brrrr","path":"/","clients":10,"mode":"100rps","streams":null,"load-generator":"h2load on the same host, 1 thread","rate":100,"server-commit":"eb6e640","duration-s":60,"timestamp":"20261110-032657"},"results":[{"rps":100.0,"exit":0,"protocol":"h1","target-rps":100,"gcs":1,"latency-ms":{"min":0.111,"max":19.71,"mean":0.521,"sd":0.575},"total":6000,"errored":0,"latency":{"count":6000,"percentiles":[{"p":0,"ms":0.111},{"p":10,"ms":0.284},{"p":25,"ms":0.347},{"p":50,"ms":0.453},{"p":75,"ms":0.587},{"p":90,"ms":0.72},{"p":95,"ms":0.82},{"p":97.5,"ms":0.989},{"p":99,"ms":1.878},{"p":99.5,"ms":4.0},{"p":99.9,"ms":6.312},{"p":99.95,"ms":6.847},{"p":99.99,"ms":19.711},{"p":99.999,"ms":19.711},{"p":100,"ms":19.711}],"mean-ms":0.5210826666666667,"per-second":[{"t":0,"count":102,"p50-ms":0.492,"p99-ms":2.823,"max-ms":3.088},{"t":1,"count":100,"p50-ms":0.455,"p99-ms":0.736,"max-ms":0.749},{"t":2,"count":100,"p50-ms":0.42,"p99-ms":1.075,"max-ms":1.123},{"t":3,"count":100,"p50-ms":0.431,"p99-ms":0.782,"max-ms":0.788},{"t":4,"count":100,"p50-ms":0.404,"p99-ms":0.975,"max-ms":1.004},{"t":5,"count":98,"p50-ms":0.423,"p99-ms":0.871,"max-ms":0.871},{"t":6,"count":100,"p50-ms":0.472,"p99-ms":1.912,"max-ms":1.919},{"t":7,"count":100,"p50-ms":0.358,"p99-ms":0.877,"max-ms":0.885},{"t":8,"count":102,"p50-ms":0.36,"p99-ms":0.674,"max-ms":0.867},{"t":9,"count":98,"p50-ms":0.474,"p99-ms":0.746,"max-ms":0.746},{"t":10,"count":102,"p50-ms":0.435,"p99-ms":1.322,"max-ms":1.411},{"t":11,"count":100,"p50-ms":0.39,"p99-ms":0.788,"max-ms":0.799},{"t":12,"count":100,"p50-ms":0.375,"p99-ms":0.728,"max-ms":0.751},{"t":13,"count":98,"p50-ms":0.381,"p99-ms":0.757,"max-ms":0.757},{"t":14,"count":102,"p50-ms":0.45,"p99-ms":0.869,"max-ms":2.968},{"t":15,"count":98,"p50-ms":0.522,"p99-ms":0.939,"max-ms":0.939},{"t":16,"count":100,"p50-ms":0.585,"p99-ms":1.361,"max-ms":1.37},{"t":17,"count":102,"p50-ms":0.443,"p99-ms":0.923,"max-ms":0.957},{"t":18,"count":98,"p50-ms":0.502,"p99-ms":0.872,"max-ms":0.872},{"t":19,"count":102,"p50-ms":0.391,"p99-ms":2.266,"max-ms":2.444},{"t":20,"count":98,"p50-ms":0.486,"p99-ms":0.854,"max-ms":0.854},{"t":21,"count":100,"p50-ms":0.518,"p99-ms":0.902,"max-ms":0.912},{"t":22,"count":102,"p50-ms":0.504,"p99-ms":1.154,"max-ms":1.309},{"t":23,"count":98,"p50-ms":0.473,"p99-ms":19.711,"max-ms":19.711},{"t":24,"count":102,"p50-ms":0.515,"p99-ms":1.734,"max-ms":1.753},{"t":25,"count":100,"p50-ms":0.471,"p99-ms":4.282,"max-ms":4.29},{"t":26,"count":98,"p50-ms":0.42,"p99-ms":0.71,"max-ms":0.71},{"t":27,"count":102,"p50-ms":0.426,"p99-ms":0.74,"max-ms":0.811},{"t":28,"count":100,"p50-ms":0.487,"p99-ms":1.966,"max-ms":3.071},{"t":29,"count":100,"p50-ms":0.523,"p99-ms":4.449,"max-ms":4.958},{"t":30,"count":100,"p50-ms":0.447,"p99-ms":0.87,"max-ms":0.938},{"t":31,"count":100,"p50-ms":0.431,"p99-ms":0.937,"max-ms":0.947},{"t":32,"count":98,"p50-ms":0.406,"p99-ms":0.864,"max-ms":0.864},{"t":33,"count":100,"p50-ms":0.448,"p99-ms":0.697,"max-ms":0.718},{"t":34,"count":100,"p50-ms":0.474,"p99-ms":2.954,"max-ms":3.11},{"t":35,"count":102,"p50-ms":0.407,"p99-ms":0.761,"max-ms":0.761},{"t":36,"count":98,"p50-ms":0.412,"p99-ms":1.057,"max-ms":1.057},{"t":37,"count":100,"p50-ms":0.443,"p99-ms":1.171,"max-ms":1.176},{"t":38,"count":100,"p50-ms":0.443,"p99-ms":0.721,"max-ms":0.728},{"t":39,"count":100,"p50-ms":0.455,"p99-ms":0.716,"max-ms":0.722},{"t":40,"count":100,"p50-ms":0.433,"p99-ms":0.785,"max-ms":0.787},{"t":41,"count":102,"p50-ms":0.428,"p99-ms":0.805,"max-ms":0.816},{"t":42,"count":98,"p50-ms":0.442,"p99-ms":0.82,"max-ms":0.82},{"t":43,"count":100,"p50-ms":0.513,"p99-ms":6.614,"max-ms":6.847},{"t":44,"count":102,"p50-ms":0.515,"p99-ms":0.792,"max-ms":0.826},{"t":45,"count":100,"p50-ms":0.461,"p99-ms":0.785,"max-ms":0.977},{"t":46,"count":100,"p50-ms":0.463,"p99-ms":0.894,"max-ms":0.928},{"t":47,"count":100,"p50-ms":0.474,"p99-ms":0.997,"max-ms":1.256},{"t":48,"count":100,"p50-ms":0.451,"p99-ms":0.873,"max-ms":1.023},{"t":49,"count":100,"p50-ms":0.475,"p99-ms":1.355,"max-ms":1.364},{"t":50,"count":98,"p50-ms":0.461,"p99-ms":0.766,"max-ms":0.766},{"t":51,"count":102,"p50-ms":0.424,"p99-ms":0.748,"max-ms":0.768},{"t":52,"count":100,"p50-ms":0.421,"p99-ms":0.693,"max-ms":0.709},{"t":53,"count":98,"p50-ms":0.5,"p99-ms":1.145,"max-ms":1.145},{"t":54,"count":102,"p50-ms":0.498,"p99-ms":1.13,"max-ms":1.137},{"t":55,"count":100,"p50-ms":0.422,"p99-ms":6.285,"max-ms":6.312},{"t":56,"count":100,"p50-ms":0.459,"p99-ms":0.758,"max-ms":0.762},{"t":57,"count":98,"p50-ms":0.448,"p99-ms":2.923,"max-ms":2.923},{"t":58,"count":100,"p50-ms":0.438,"p99-ms":1.246,"max-ms":1.916},{"t":59,"count":100,"p50-ms":0.485,"p99-ms":0.849,"max-ms":0.865}]},"status-2xx":6000,"timeout":0,"bytes-per-request":9856,"failed":0,"succeeded":6000},{"rps":100.0,"exit":0,"protocol":"h2","target-rps":100,"gcs":1,"latency-ms":{"min":0.118,"max":11.18,"mean":0.442,"sd":0.422},"total":6000,"errored":0,"latency":{"count":6000,"percentiles":[{"p":0,"ms":0.118},{"p":10,"ms":0.242},{"p":25,"ms":0.294},{"p":50,"ms":0.383},{"p":75,"ms":0.524},{"p":90,"ms":0.649},{"p":95,"ms":0.731},{"p":97.5,"ms":0.836},{"p":99,"ms":1.055},{"p":99.5,"ms":1.623},{"p":99.9,"ms":8.93},{"p":99.95,"ms":11.05},{"p":99.99,"ms":11.184},{"p":99.999,"ms":11.184},{"p":100,"ms":11.184}],"mean-ms":0.4417321666666667,"per-second":[{"t":0,"count":107,"p50-ms":0.365,"p99-ms":11.086,"max-ms":11.184},{"t":1,"count":100,"p50-ms":0.406,"p99-ms":3.403,"max-ms":3.471},{"t":2,"count":100,"p50-ms":0.36,"p99-ms":0.761,"max-ms":0.778},{"t":3,"count":100,"p50-ms":0.441,"p99-ms":0.984,"max-ms":0.995},{"t":4,"count":100,"p50-ms":0.414,"p99-ms":0.975,"max-ms":0.989},{"t":5,"count":100,"p50-ms":0.408,"p99-ms":0.97,"max-ms":1.02},{"t":6,"count":100,"p50-ms":0.407,"p99-ms":0.752,"max-ms":0.763},{"t":7,"count":100,"p50-ms":0.321,"p99-ms":0.996,"max-ms":1.055},{"t":8,"count":100,"p50-ms":0.399,"p99-ms":0.734,"max-ms":0.735},{"t":9,"count":100,"p50-ms":0.491,"p99-ms":0.871,"max-ms":0.907},{"t":10,"count":100,"p50-ms":0.442,"p99-ms":0.689,"max-ms":0.735},{"t":11,"count":100,"p50-ms":0.412,"p99-ms":1.091,"max-ms":1.189},{"t":12,"count":100,"p50-ms":0.36,"p99-ms":0.727,"max-ms":0.779},{"t":13,"count":100,"p50-ms":0.405,"p99-ms":0.755,"max-ms":0.777},{"t":14,"count":100,"p50-ms":0.413,"p99-ms":0.979,"max-ms":1.006},{"t":15,"count":100,"p50-ms":0.369,"p99-ms":0.917,"max-ms":0.951},{"t":16,"count":100,"p50-ms":0.414,"p99-ms":0.75,"max-ms":0.835},{"t":17,"count":100,"p50-ms":0.412,"p99-ms":1.574,"max-ms":1.753},{"t":18,"count":100,"p50-ms":0.343,"p99-ms":0.655,"max-ms":0.661},{"t":19,"count":100,"p50-ms":0.38,"p99-ms":2.827,"max-ms":2.945},{"t":20,"count":100,"p50-ms":0.378,"p99-ms":0.777,"max-ms":0.834},{"t":21,"count":100,"p50-ms":0.34,"p99-ms":0.828,"max-ms":0.945},{"t":22,"count":100,"p50-ms":0.369,"p99-ms":0.837,"max-ms":0.928},{"t":23,"count":100,"p50-ms":0.396,"p99-ms":0.788,"max-ms":0.798},{"t":24,"count":100,"p50-ms":0.406,"p99-ms":0.814,"max-ms":0.866},{"t":25,"count":100,"p50-ms":0.376,"p99-ms":0.722,"max-ms":0.741},{"t":26,"count":100,"p50-ms":0.407,"p99-ms":0.841,"max-ms":0.87},{"t":27,"count":100,"p50-ms":0.34,"p99-ms":0.789,"max-ms":0.845},{"t":28,"count":100,"p50-ms":0.391,"p99-ms":0.794,"max-ms":0.83},{"t":29,"count":100,"p50-ms":0.373,"p99-ms":0.842,"max-ms":0.846},{"t":30,"count":100,"p50-ms":0.567,"p99-ms":1.135,"max-ms":1.177},{"t":31,"count":100,"p50-ms":0.344,"p99-ms":0.668,"max-ms":0.673},{"t":32,"count":100,"p50-ms":0.395,"p99-ms":0.694,"max-ms":0.758},{"t":33,"count":100,"p50-ms":0.403,"p99-ms":0.712,"max-ms":0.787},{"t":34,"count":100,"p50-ms":0.321,"p99-ms":0.617,"max-ms":0.627},{"t":35,"count":100,"p50-ms":0.397,"p99-ms":0.745,"max-ms":0.748},{"t":36,"count":100,"p50-ms":0.339,"p99-ms":0.699,"max-ms":0.718},{"t":37,"count":100,"p50-ms":0.386,"p99-ms":0.737,"max-ms":1.077},{"t":38,"count":100,"p50-ms":0.378,"p99-ms":0.803,"max-ms":0.869},{"t":39,"count":100,"p50-ms":0.37,"p99-ms":0.708,"max-ms":0.746},{"t":40,"count":100,"p50-ms":0.365,"p99-ms":0.689,"max-ms":0.711},{"t":41,"count":100,"p50-ms":0.338,"p99-ms":0.743,"max-ms":0.792},{"t":42,"count":100,"p50-ms":0.378,"p99-ms":0.795,"max-ms":0.942},{"t":43,"count":100,"p50-ms":0.354,"p99-ms":0.643,"max-ms":0.646},{"t":44,"count":100,"p50-ms":0.429,"p99-ms":0.994,"max-ms":1.052},{"t":45,"count":100,"p50-ms":0.418,"p99-ms":0.963,"max-ms":1.464},{"t":46,"count":100,"p50-ms":0.376,"p99-ms":1.201,"max-ms":1.287},{"t":47,"count":100,"p50-ms":0.457,"p99-ms":2.47,"max-ms":3.228},{"t":48,"count":100,"p50-ms":0.373,"p99-ms":2.35,"max-ms":2.404},{"t":49,"count":100,"p50-ms":0.417,"p99-ms":0.761,"max-ms":0.767},{"t":50,"count":100,"p50-ms":0.396,"p99-ms":0.861,"max-ms":0.974},{"t":51,"count":100,"p50-ms":0.368,"p99-ms":1.371,"max-ms":5.828},{"t":52,"count":100,"p50-ms":0.333,"p99-ms":0.795,"max-ms":0.822},{"t":53,"count":100,"p50-ms":0.379,"p99-ms":0.653,"max-ms":0.654},{"t":54,"count":100,"p50-ms":0.395,"p99-ms":0.739,"max-ms":0.819},{"t":55,"count":100,"p50-ms":0.372,"p99-ms":0.908,"max-ms":0.976},{"t":56,"count":100,"p50-ms":0.341,"p99-ms":0.843,"max-ms":0.894},{"t":57,"count":100,"p50-ms":0.35,"p99-ms":0.806,"max-ms":0.879},{"t":58,"count":100,"p50-ms":0.332,"p99-ms":0.708,"max-ms":0.729},{"t":59,"count":93,"p50-ms":0.351,"p99-ms":0.788,"max-ms":0.788}]},"status-2xx":6000,"timeout":0,"bytes-per-request":9823,"failed":0,"succeeded":6000}]},{"label":"linux-after-eb6e640-root","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"d12b45a","dirty":false},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"target/release/go-brrrr","path":"/","clients":50,"mode":"uncapped","streams":1,"load-generator":"h2load on the same host, 1 thread","rate":null,"server-commit":"eb6e640","duration-s":30,"timestamp":"20261110-032810"},"results":[{"rps":48490.67,"exit":0,"protocol":"h1","target-rps":null,"gcs":261,"latency-ms":{"min":0.186,"max":30.47,"mean":1.03,"sd":0.786},"total":1454720,"errored":0,"latency":{"count":1454720,"percentiles":[{"p":0,"ms":0.186},{"p":10,"ms":0.449},{"p":25,"ms":0.633},{"p":50,"ms":0.896},{"p":75,"ms":1.209},{"p":90,"ms":1.595},{"p":95,"ms":1.895},{"p":97.5,"ms":2.332},{"p":99,"ms":5.137},{"p":99.5,"ms":6.339},{"p":99.9,"ms":8.435},{"p":99.95,"ms":9.639},{"p":99.99,"ms":16.65},{"p":99.999,"ms":23.222},{"p":100,"ms":30.47}],"mean-ms":1.028951818219314,"per-second":[{"t":0,"count":45101,"p50-ms":0.889,"p99-ms":5.4,"max-ms":30.47},{"t":1,"count":51016,"p50-ms":0.841,"p99-ms":4.49,"max-ms":11.334},{"t":2,"count":45117,"p50-ms":0.958,"p99-ms":5.28,"max-ms":13.366},{"t":3,"count":51406,"p50-ms":0.818,"p99-ms":4.993,"max-ms":15.26},{"t":4,"count":57259,"p50-ms":0.744,"p99-ms":4.281,"max-ms":11.374},{"t":5,"count":57195,"p50-ms":0.747,"p99-ms":4.746,"max-ms":11.867},{"t":6,"count":48124,"p50-ms":0.909,"p99-ms":4.714,"max-ms":18.515},{"t":7,"count":49472,"p50-ms":0.9,"p99-ms":5.165,"max-ms":12.313},{"t":8,"count":42724,"p50-ms":1.046,"p99-ms":4.296,"max-ms":9.528},{"t":9,"count":43420,"p50-ms":1.01,"p99-ms":5.859,"max-ms":9.697},{"t":10,"count":45561,"p50-ms":0.971,"p99-ms":4.587,"max-ms":10.959},{"t":11,"count":43128,"p50-ms":0.992,"p99-ms":6.204,"max-ms":10.909},{"t":12,"count":45381,"p50-ms":0.892,"p99-ms":5.897,"max-ms":13.418},{"t":13,"count":44367,"p50-ms":0.981,"p99-ms":5.634,"max-ms":11.858},{"t":14,"count":48938,"p50-ms":0.879,"p99-ms":5.224,"max-ms":22.181},{"t":15,"count":54955,"p50-ms":0.805,"p99-ms":4.395,"max-ms":10.569},{"t":16,"count":50720,"p50-ms":0.866,"p99-ms":4.289,"max-ms":12.33},{"t":17,"count":46029,"p50-ms":0.958,"p99-ms":5.822,"max-ms":10.388},{"t":18,"count":48826,"p50-ms":0.921,"p99-ms":3.911,"max-ms":10.646},{"t":19,"count":49610,"p50-ms":0.895,"p99-ms":4.335,"max-ms":11.003},{"t":20,"count":49098,"p50-ms":0.889,"p99-ms":4.563,"max-ms":13.286},{"t":21,"count":49951,"p50-ms":0.865,"p99-ms":5.527,"max-ms":18.379},{"t":22,"count":51640,"p50-ms":0.863,"p99-ms":4.228,"max-ms":8.971},{"t":23,"count":52242,"p50-ms":0.859,"p99-ms":5.031,"max-ms":10.593},{"t":24,"count":48811,"p50-ms":0.92,"p99-ms":3.763,"max-ms":14.516},{"t":25,"count":47745,"p50-ms":0.902,"p99-ms":5.748,"max-ms":11.032},{"t":26,"count":48726,"p50-ms":0.872,"p99-ms":5.36,"max-ms":10.928},{"t":27,"count":43060,"p50-ms":1.009,"p99-ms":6.13,"max-ms":14.511},{"t":28,"count":48398,"p50-ms":0.898,"p99-ms":5.012,"max-ms":11.737},{"t":29,"count":46700,"p50-ms":0.932,"p99-ms":5.0,"max-ms":16.335}]},"status-2xx":1454720,"timeout":0,"bytes-per-request":9824,"failed":0,"succeeded":1454720},{"rps":58544.07,"exit":0,"protocol":"h2","target-rps":null,"gcs":315,"latency-ms":{"min":0.096,"max":23.25,"mean":0.752,"sd":0.78},"total":1756322,"errored":0,"latency":{"count":1756322,"percentiles":[{"p":0,"ms":0.096},{"p":10,"ms":0.265},{"p":25,"ms":0.341},{"p":50,"ms":0.552},{"p":75,"ms":0.895},{"p":90,"ms":1.268},{"p":95,"ms":1.597},{"p":97.5,"ms":2.218},{"p":99,"ms":5.108},{"p":99.5,"ms":6.054},{"p":99.9,"ms":8.015},{"p":99.95,"ms":9.054},{"p":99.99,"ms":12.036},{"p":99.999,"ms":16.317},{"p":100,"ms":23.252}],"mean-ms":0.7419849173443139,"per-second":[{"t":0,"count":62463,"p50-ms":0.478,"p99-ms":5.32,"max-ms":13.217},{"t":1,"count":61434,"p50-ms":0.515,"p99-ms":5.062,"max-ms":13.67},{"t":2,"count":61671,"p50-ms":0.488,"p99-ms":4.747,"max-ms":10.107},{"t":3,"count":58892,"p50-ms":0.547,"p99-ms":4.777,"max-ms":10.332},{"t":4,"count":66164,"p50-ms":0.427,"p99-ms":4.914,"max-ms":15.018},{"t":5,"count":57378,"p50-ms":0.57,"p99-ms":5.4,"max-ms":16.58},{"t":6,"count":57701,"p50-ms":0.573,"p99-ms":5.14,"max-ms":15.316},{"t":7,"count":54677,"p50-ms":0.658,"p99-ms":5.424,"max-ms":14.487},{"t":8,"count":59682,"p50-ms":0.584,"p99-ms":5.089,"max-ms":13.482},{"t":9,"count":61746,"p50-ms":0.564,"p99-ms":4.722,"max-ms":10.08},{"t":10,"count":48134,"p50-ms":0.741,"p99-ms":4.928,"max-ms":17.06},{"t":11,"count":46488,"p50-ms":0.756,"p99-ms":5.483,"max-ms":12.963},{"t":12,"count":53529,"p50-ms":0.642,"p99-ms":5.015,"max-ms":13.256},{"t":13,"count":56860,"p50-ms":0.604,"p99-ms":5.118,"max-ms":16.267},{"t":14,"count":56586,"p50-ms":0.572,"p99-ms":5.802,"max-ms":16.335},{"t":15,"count":54800,"p50-ms":0.64,"p99-ms":4.887,"max-ms":14.771},{"t":16,"count":56492,"p50-ms":0.561,"p99-ms":5.428,"max-ms":15.814},{"t":17,"count":53262,"p50-ms":0.685,"p99-ms":5.573,"max-ms":17.783},{"t":18,"count":54471,"p50-ms":0.617,"p99-ms":5.366,"max-ms":17.342},{"t":19,"count":53848,"p50-ms":0.64,"p99-ms":5.081,"max-ms":13.098},{"t":20,"count":52448,"p50-ms":0.681,"p99-ms":5.49,"max-ms":19.984},{"t":21,"count":64565,"p50-ms":0.455,"p99-ms":5.164,"max-ms":12.489},{"t":22,"count":59411,"p50-ms":0.528,"p99-ms":5.081,"max-ms":14.833},{"t":23,"count":65707,"p50-ms":0.41,"p99-ms":5.473,"max-ms":16.517},{"t":24,"count":56785,"p50-ms":0.618,"p99-ms":4.938,"max-ms":17.241},{"t":25,"count":59716,"p50-ms":0.525,"p99-ms":5.187,"max-ms":12.524},{"t":26,"count":69167,"p50-ms":0.393,"p99-ms":4.796,"max-ms":14.376},{"t":27,"count":60410,"p50-ms":0.5,"p99-ms":5.135,"max-ms":16.161},{"t":28,"count":67874,"p50-ms":0.406,"p99-ms":4.842,"max-ms":11.346},{"t":29,"count":63961,"p50-ms":0.427,"p99-ms":4.949,"max-ms":23.252}]},"status-2xx":1756322,"timeout":0,"bytes-per-request":9824,"failed":0,"succeeded":1756322}]},{"label":"linux-after-eb6e640-add","system":{"description":"Intel(R) Xeon(R) Processor @ 2.10GHz, 4 CPUs, Ubuntu 24.04.5 LTS (KVM, docker)","h2load":"h2load nghttp2/1.59.0","hypervisor":"KVM","virtualization":"docker","git":{"sha":"d12b45a","dirty":false},"arch":"x86_64","memory-gb":15.7,"hostname":"vm","ncpus":4,"cpu-max-mhz":null,"cpu-current-mhz":2100.0,"cpu-freq-note":"no cpufreq: frequency scaling not exposed (typical of VMs)","cgroup-cpu-max":null,"os":"Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v338)","cpu-nominal-ghz":2.1,"jank":"jank-0.1-alpha","threads-per-core":1,"cpu-model":"Intel(R) Xeon(R) Processor @ 2.10GHz"},"run":{"binary":"target/release/go-brrrr","path":"/add?a=1&b=2","clients":50,"mode":"uncapped","streams":1,"load-generator":"h2load on the same host, 1 thread","rate":null,"server-commit":"eb6e640","duration-s":30,"timestamp":"20261110-032918"},"results":[{"rps":34098.6,"exit":0,"protocol":"h1","target-rps":null,"gcs":328,"latency-ms":{"min":0.169,"max":21.67,"mean":1.46,"sd":1.08},"total":1022958,"errored":0,"latency":{"count":1022958,"percentiles":[{"p":0,"ms":0.169},{"p":10,"ms":0.679},{"p":25,"ms":0.926},{"p":50,"ms":1.232},{"p":75,"ms":1.658},{"p":90,"ms":2.116},{"p":95,"ms":2.762},{"p":97.5,"ms":5.092},{"p":99,"ms":6.626},{"p":99.5,"ms":7.47},{"p":99.9,"ms":10.239},{"p":99.95,"ms":11.459},{"p":99.99,"ms":14.555},{"p":99.999,"ms":19.444},{"p":100,"ms":21.673}],"mean-ms":1.464161243179094,"per-second":[{"t":0,"count":31627,"p50-ms":1.328,"p99-ms":6.898,"max-ms":19.636},{"t":1,"count":30749,"p50-ms":1.382,"p99-ms":7.278,"max-ms":14.169},{"t":2,"count":33386,"p50-ms":1.283,"p99-ms":6.551,"max-ms":14.051},{"t":3,"count":33230,"p50-ms":1.263,"p99-ms":6.458,"max-ms":21.199},{"t":4,"count":31593,"p50-ms":1.332,"p99-ms":7.418,"max-ms":19.9},{"t":5,"count":32873,"p50-ms":1.256,"p99-ms":6.657,"max-ms":16.671},{"t":6,"count":33019,"p50-ms":1.276,"p99-ms":6.347,"max-ms":12.823},{"t":7,"count":34200,"p50-ms":1.218,"p99-ms":6.535,"max-ms":15.303},{"t":8,"count":36838,"p50-ms":1.142,"p99-ms":6.291,"max-ms":21.673},{"t":9,"count":35368,"p50-ms":1.198,"p99-ms":6.522,"max-ms":18.492},{"t":10,"count":34863,"p50-ms":1.208,"p99-ms":6.48,"max-ms":14.506},{"t":11,"count":34323,"p50-ms":1.22,"p99-ms":6.542,"max-ms":13.979},{"t":12,"count":35517,"p50-ms":1.158,"p99-ms":6.688,"max-ms":13.848},{"t":13,"count":36283,"p50-ms":1.151,"p99-ms":6.552,"max-ms":15.553},{"t":14,"count":33796,"p50-ms":1.245,"p99-ms":6.615,"max-ms":16.999},{"t":15,"count":33053,"p50-ms":1.253,"p99-ms":6.761,"max-ms":14.2},{"t":16,"count":32953,"p50-ms":1.287,"p99-ms":6.613,"max-ms":15.092},{"t":17,"count":35402,"p50-ms":1.184,"p99-ms":6.359,"max-ms":16.89},{"t":18,"count":32705,"p50-ms":1.297,"p99-ms":6.44,"max-ms":14.016},{"t":19,"count":31125,"p50-ms":1.344,"p99-ms":6.97,"max-ms":19.74},{"t":20,"count":34768,"p50-ms":1.188,"p99-ms":6.278,"max-ms":13.58},{"t":21,"count":35207,"p50-ms":1.167,"p99-ms":6.863,"max-ms":18.78},{"t":22,"count":36494,"p50-ms":1.147,"p99-ms":6.26,"max-ms":13.709},{"t":23,"count":37403,"p50-ms":1.105,"p99-ms":6.158,"max-ms":14.061},{"t":24,"count":36886,"p50-ms":1.137,"p99-ms":6.254,"max-ms":17.206},{"t":25,"count":36626,"p50-ms":1.139,"p99-ms":6.217,"max-ms":17.747},{"t":26,"count":34579,"p50-ms":1.23,"p99-ms":6.766,"max-ms":16.089},{"t":27,"count":33328,"p50-ms":1.252,"p99-ms":7.364,"max-ms":16.611},{"t":28,"count":31525,"p50-ms":1.406,"p99-ms":6.848,"max-ms":14.341},{"t":29,"count":33239,"p50-ms":1.289,"p99-ms":6.897,"max-ms":13.205}]},"status-2xx":1022958,"timeout":0,"bytes-per-request":17312,"failed":0,"succeeded":1022958},{"rps":31778.9,"exit":0,"protocol":"h2","target-rps":null,"gcs":306,"latency-ms":{"min":0.132,"max":27.91,"mean":1.53,"sd":1.14},"total":953367,"errored":0,"latency":{"count":953367,"percentiles":[{"p":0,"ms":0.132},{"p":10,"ms":0.643},{"p":25,"ms":0.942},{"p":50,"ms":1.313},{"p":75,"ms":1.756},{"p":90,"ms":2.235},{"p":95,"ms":2.903},{"p":97.5,"ms":5.363},{"p":99,"ms":7.013},{"p":99.5,"ms":7.885},{"p":99.9,"ms":10.255},{"p":99.95,"ms":11.496},{"p":99.99,"ms":13.642},{"p":99.999,"ms":17.052},{"p":100,"ms":27.912}],"mean-ms":1.528473099026922,"per-second":[{"t":0,"count":28085,"p50-ms":1.485,"p99-ms":7.655,"max-ms":17.346},{"t":1,"count":30357,"p50-ms":1.406,"p99-ms":7.287,"max-ms":19.104},{"t":2,"count":29881,"p50-ms":1.43,"p99-ms":7.076,"max-ms":14.521},{"t":3,"count":29615,"p50-ms":1.42,"p99-ms":7.103,"max-ms":27.912},{"t":4,"count":28220,"p50-ms":1.521,"p99-ms":7.169,"max-ms":12.532},{"t":5,"count":30499,"p50-ms":1.385,"p99-ms":7.029,"max-ms":15.87},{"t":6,"count":30172,"p50-ms":1.386,"p99-ms":7.424,"max-ms":14.106},{"t":7,"count":32992,"p50-ms":1.255,"p99-ms":7.078,"max-ms":14.678},{"t":8,"count":30745,"p50-ms":1.338,"p99-ms":7.294,"max-ms":13.59},{"t":9,"count":33148,"p50-ms":1.259,"p99-ms":6.808,"max-ms":14.542},{"t":10,"count":30942,"p50-ms":1.36,"p99-ms":7.055,"max-ms":17.807},{"t":11,"count":31441,"p50-ms":1.315,"p99-ms":6.747,"max-ms":13.816},{"t":12,"count":32440,"p50-ms":1.276,"p99-ms":7.115,"max-ms":13.935},{"t":13,"count":32497,"p50-ms":1.311,"p99-ms":6.947,"max-ms":15.555},{"t":14,"count":32967,"p50-ms":1.24,"p99-ms":6.98,"max-ms":15.855},{"t":15,"count":33929,"p50-ms":1.221,"p99-ms":6.71,"max-ms":21.961},{"t":16,"count":33539,"p50-ms":1.282,"p99-ms":6.601,"max-ms":13.51},{"t":17,"count":32001,"p50-ms":1.316,"p99-ms":6.921,"max-ms":17.811},{"t":18,"count":31359,"p50-ms":1.324,"p99-ms":7.443,"max-ms":13.599},{"t":19,"count":30550,"p50-ms":1.372,"p99-ms":7.417,"max-ms":14.425},{"t":20,"count":32896,"p50-ms":1.234,"p99-ms":6.973,"max-ms":16.026},{"t":21,"count":33294,"p50-ms":1.226,"p99-ms":7.078,"max-ms":15.279},{"t":22,"count":33238,"p50-ms":1.224,"p99-ms":7.269,"max-ms":16.844},{"t":23,"count":32320,"p50-ms":1.246,"p99-ms":7.095,"max-ms":17.209},{"t":24,"count":31093,"p50-ms":1.352,"p99-ms":6.872,"max-ms":14.067},{"t":25,"count":31154,"p50-ms":1.341,"p99-ms":7.213,"max-ms":15.242},{"t":26,"count":32760,"p50-ms":1.285,"p99-ms":6.848,"max-ms":13.271},{"t":27,"count":34650,"p50-ms":1.214,"p99-ms":6.477,"max-ms":14.392},{"t":28,"count":35337,"p50-ms":1.197,"p99-ms":6.488,"max-ms":16.306},{"t":29,"count":31246,"p50-ms":1.285,"p99-ms":7.047,"max-ms":14.182}]},"status-2xx":953367,"timeout":0,"bytes-per-request":17311,"failed":0,"succeeded":953367}]},{"label":"macos-m2pro-eb6e640","reported":true,"source":"Figures quoted in README.md and commit eb6e640 (Mac session). Summary only: no per-request data, so no percentiles. Rerun `bb bench` on the Mac to replace this with a measured results file.","system":{"cpu-model":"Apple M2 Pro","cpu-freq-note":"not recorded","ncpus":null,"os":"macOS (version not recorded)","virtualization":"none","description":"Apple M2 Pro, macOS (CPU count, frequency and OS version not recorded)","git":{"sha":"eb6e640","dirty":false}},"runs":[{"mode":"100rps","path":"/","protocols":["h1","h2"],"rps":100.0,"mean-ms":0.6},{"mode":"uncapped","path":"/","protocols":["h1","h2"],"rps":43000,"clients":50,"note":"~43k req/s on h1 and h2"},{"mode":"uncapped","path":"/add?a=1&b=2","protocols":["h1","h2"],"rps":25000,"clients":50,"note":"~25k req/s on h1 and h2"}],"kb-per-request":{"/":9.7,"/add?a=1&b=2":17}}]</script>
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('bench-data').textContent);
+  const SERIES_VARS = ['--s1', '--s2', '--s3'];
+  const NS = 'http://www.w3.org/2000/svg';
+  const fig = document.getElementById('figures');
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // A series is one machine + one commit; its key is the label without the path suffix.
+  const seriesKey = (label) => label.replace(/-(root|add)$/, '');
+  const keys = [];
+  data.forEach((d) => { const k = seriesKey(d.label); if (!keys.includes(k)) keys.push(k); });
+  const colorOf = (label) => SERIES_VARS[keys.indexOf(seriesKey(label)) % SERIES_VARS.length];
+  const sysOf = {};
+  const commitOf = {};
+  data.forEach((d) => { sysOf[seriesKey(d.label)] = d.system;
+    commitOf[seriesKey(d.label)] = (d.run && d.run['server-commit']) || (d.reported && d.system.git && d.system.git.sha); });
+  const sysLine = (s) => s ? (s.description || s['cpu-model']) : '';
+  const measured = data.filter((d) => !d.reported);
+  const reported = data.filter((d) => d.reported);
+
+  function el(tag, attrs, parent, text) {
+    const e = tag.match(/^(svg|g|path|line|rect|circle|text|pattern|defs)$/) ? document.createElementNS(NS, tag) : document.createElement(tag);
+    for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  const fmtMs = (v) => v == null ? '–' : v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : Math.round(v).toString();
+  const fmtRps = (v) => v == null ? '–' : v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0);
+
+  function section(title, method, keysShown, hatchedKeys) {
+    const s = el('section', {}, fig);
+    el('h2', {}, s, title);
+    if (method) el('div', { class: 'method' }, s, method);
+    const lg = el('div', { class: 'legend' }, s);
+    keysShown.forEach((k) => {
+      const it = el('div', { class: 'legend-item' }, lg);
+      const sw = el('span', { class: 'swatch' + (hatchedKeys && hatchedKeys.includes(k) ? ' hatched' : '') }, it);
+      const c = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
+      sw.style.background = hatchedKeys && hatchedKeys.includes(k)
+        ? `repeating-linear-gradient(45deg, ${c} 0 2px, transparent 2px 5px)` : c;
+      if (hatchedKeys && hatchedKeys.includes(k)) sw.style.border = `1px solid ${c}`;
+      el('span', { class: 'legend-name' }, it, k + (hatchedKeys && hatchedKeys.includes(k) ? ' (reported)' : ''));
+      el('span', { class: 'legend-sys' }, it, sysLine(sysOf[k]));
+    });
+    const panels = el('div', { class: 'panels' }, s);
+    return panels;
+  }
+
+  function tooltip(panel) {
+    const t = el('div', { class: 'tip' }, panel); t.hidden = true;
+    return {
+      show(html, x, y) { t.innerHTML = html; t.hidden = false;
+        const pw = panel.clientWidth; const tw = t.offsetWidth;
+        t.style.left = Math.min(Math.max(4, x + 12), pw - tw - 4) + 'px'; t.style.top = (y + 12) + 'px'; },
+      hide() { t.hidden = true; }
+    };
+  }
+
+  // ---- percentile curves: x = percentile on a "nines" scale, y = ms on a log scale ----
+  const nines = (p) => p >= 100 ? 6 : Math.min(6, -Math.log10(1 - p / 100));
+  function percentileChart(panel, title, runs) {
+    el('h3', {}, panel, title);
+    const W = 460, H = 250, L = 46, R = 12, T = 10, B = 34;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const pts = runs.flatMap((r) => r.pcts.map((q) => q.ms)).filter((v) => v > 0);
+    if (!pts.length) { el('div', { class: 'empty' }, panel, 'No data'); return; }
+    let lo = Math.pow(10, Math.floor(Math.log10(Math.min(...pts)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...pts))));
+    const x = (p) => L + (nines(p) / 6) * (W - L - R);
+    const y = (v) => T + (1 - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (H - T - B);
+    for (let d = lo; d <= hi * 1.0001; d *= 10) {
+      el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: css('--grid'), 'stroke-width': 1 }, svg);
+      el('text', { x: L - 6, y: y(d) + 3, 'text-anchor': 'end' }, svg, fmtMs(d) + 'ms');
+    }
+    [[0, '0'], [90, '90'], [99, '99'], [99.9, '99.9'], [99.99, '99.99'], [99.999, '99.999'], [100, 'max']].forEach(([p, lbl]) => {
+      el('line', { x1: x(p), x2: x(p), y1: T, y2: H - B, stroke: css('--grid'), 'stroke-width': 1 }, svg);
+      el('text', { x: x(p), y: H - B + 14, 'text-anchor': 'middle' }, svg, lbl);
+    });
+    el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, 'percentile');
+    const tip = tooltip(panel);
+    runs.forEach((r) => {
+      const c = css(colorOf(r.label));
+      const ps = r.pcts.filter((q) => q.ms > 0 && q.p <= 100 && (q.p === 100 || nines(q.p) < 6));
+      el('path', { d: ps.map((q, i) => (i ? 'L' : 'M') + x(q.p).toFixed(1) + ',' + y(q.ms).toFixed(1)).join(''),
+        fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+      ps.forEach((q) => {
+        const dot = el('circle', { cx: x(q.p), cy: y(q.ms), r: 3, fill: c, stroke: css('--surface'), 'stroke-width': 2 }, svg);
+        const hit = el('circle', { cx: x(q.p), cy: y(q.ms), r: 9, fill: 'transparent' }, svg);
+        hit.addEventListener('mouseenter', (e) => { const b = panel.getBoundingClientRect();
+          tip.show(`${seriesKey(r.label)}<br>p${q.p === 100 ? ' max' : q.p}: ${fmtMs(q.ms)}ms`, e.clientX - b.left, e.clientY - b.top); dot.setAttribute('r', 4.5); });
+        hit.addEventListener('mouseleave', () => { tip.hide(); dot.setAttribute('r', 3); });
+      });
+    });
+  }
+
+  // ---- per-second series: p99 (solid) and max (dashed) over the run ----
+  function timeChart(panel, title, runs) {
+    el('h3', {}, panel, title);
+    const W = 460, H = 220, L = 46, R = 12, T = 10, B = 34;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const all = runs.flatMap((r) => r.series.flatMap((s) => [s['p99-ms'], s['max-ms']])).filter((v) => v > 0);
+    if (!all.length) { el('div', { class: 'empty' }, panel, 'No data'); return; }
+    const tmax = Math.max(...runs.map((r) => r.series.length - 1), 1);
+    let lo = Math.pow(10, Math.floor(Math.log10(Math.min(...all)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...all))));
+    const x = (t) => L + (t / tmax) * (W - L - R);
+    const y = (v) => T + (1 - (Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (H - T - B);
+    for (let d = lo; d <= hi * 1.0001; d *= 10) {
+      el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: css('--grid') }, svg);
+      el('text', { x: L - 6, y: y(d) + 3, 'text-anchor': 'end' }, svg, fmtMs(d) + 'ms');
+    }
+    const step = tmax > 40 ? 10 : 5;
+    for (let t = 0; t <= tmax; t += step) el('text', { x: x(t), y: H - B + 14, 'text-anchor': 'middle' }, svg, t + 's');
+    el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, 'time into run · solid p99, dashed max');
+    const tip = tooltip(panel);
+    runs.forEach((r) => {
+      const c = css(colorOf(r.label));
+      [['p99-ms', ''], ['max-ms', '4 3']].forEach(([k, dash]) => {
+        const ps = r.series.filter((s) => s[k] > 0);
+        el('path', { d: ps.map((s, i) => (i ? 'L' : 'M') + x(s.t).toFixed(1) + ',' + y(s[k]).toFixed(1)).join(''),
+          fill: 'none', stroke: c, 'stroke-width': dash ? 1.5 : 2, 'stroke-dasharray': dash, opacity: dash ? 0.85 : 1 }, svg);
+      });
+    });
+    // crosshair: nearest second
+    const cross = el('line', { y1: T, y2: H - B, stroke: css('--ink-3'), 'stroke-width': 1, visibility: 'hidden' }, svg);
+    const hit = el('rect', { x: L, y: T, width: W - L - R, height: H - T - B, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', (e) => {
+      const b = svg.getBoundingClientRect(); const sx = (e.clientX - b.left) * (W / b.width);
+      const t = Math.max(0, Math.min(tmax, Math.round((sx - L) / (W - L - R) * tmax)));
+      cross.setAttribute('x1', x(t)); cross.setAttribute('x2', x(t)); cross.setAttribute('visibility', 'visible');
+      const rows = runs.map((r) => { const s = r.series.find((q) => q.t === t);
+        return s ? `${seriesKey(r.label)}: p99 ${fmtMs(s['p99-ms'])} · max ${fmtMs(s['max-ms'])}ms` : null; }).filter(Boolean);
+      const pb = panel.getBoundingClientRect(); tip.show(`${t}s<br>` + rows.join('<br>'), e.clientX - pb.left, e.clientY - pb.top);
+    });
+    hit.addEventListener('mouseleave', () => { tip.hide(); cross.setAttribute('visibility', 'hidden'); });
+  }
+
+  // ---- throughput bars, grouped by path and protocol ----
+  function throughputChart(panel, title, groups) {
+    el('h3', {}, panel, title);
+    const n = groups.reduce((a, g) => a + g.bars.length, 0) + groups.length;
+    const W = 960, L = 150, R = 70, T = 4, rowH = 20, H = T + n * rowH + 22;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': title }, panel);
+    const defs = el('defs', {}, svg);
+    const max = Math.max(...groups.flatMap((g) => g.bars.map((b) => b.rps)), 1);
+    const x = (v) => L + (v / max) * (W - L - R);
+    const tip = tooltip(panel);
+    let row = 0;
+    groups.forEach((g) => {
+      el('text', { x: 0, y: T + row * rowH + 14, 'font-weight': 500, style: 'fill: var(--ink-2)' }, svg, g.name);
+      row++;
+      g.bars.forEach((b) => {
+        const c = css(colorOf(b.label)); const yb = T + row * rowH + 3;
+        let fill = c;
+        if (b.reported) {
+          const id = 'hatch-' + keys.indexOf(seriesKey(b.label));
+          if (!defs.querySelector('#' + id)) {
+            const pat = el('pattern', { id, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+            el('rect', { width: 2.5, height: 6, fill: c }, pat);
+          }
+          fill = `url(#${id})`;
+        }
+        el('text', { x: L - 6, y: yb + 11, 'text-anchor': 'end' }, svg, seriesKey(b.label).replace(/-[0-9a-f]{7}$/, ''));
+        const rect = el('rect', { x: L, y: yb, width: Math.max(1, x(b.rps) - L), height: 14, rx: 2, fill,
+          stroke: b.reported ? c : 'none', 'stroke-width': b.reported ? 1 : 0 }, svg);
+        el('text', { x: x(b.rps) + 4, y: yb + 11, style: 'fill: var(--ink-2)' }, svg, fmtRps(b.rps) + (b.reported ? '*' : ''));
+        rect.addEventListener('mouseenter', (e) => { const pb = panel.getBoundingClientRect();
+          tip.show(`${seriesKey(b.label)}<br>${g.name}: ${Math.round(b.rps).toLocaleString()} req/s${b.reported ? '<br>reported, approx.' : ''}`, e.clientX - pb.left, e.clientY - pb.top); });
+        rect.addEventListener('mouseleave', () => tip.hide());
+        row++;
+      });
+    });
+    el('text', { x: L, y: H - 4 }, svg, 'req/s' + (groups.some((g) => g.bars.some((b) => b.reported)) ? '  · * reported, approximate' : ''));
+  }
+
+  // ---- assemble ----
+  const pick = (mode, path) => measured.filter((d) => d.run.mode === mode && d.run.path === path);
+  const protos = ['h1', 'h2', 'h3'];
+  const resFor = (d, p) => (d.results || []).find((r) => r.protocol === p);
+  const asRun = (d, p) => { const r = resFor(d, p); return r && r.latency ? { label: d.label, pcts: r.latency.percentiles, series: r.latency['per-second'] } : null; };
+
+  const fixed = pick('100rps', '/');
+  if (fixed.length) {
+    const ks = [...new Set(fixed.map((d) => seriesKey(d.label)))];
+    const d0 = fixed[0].run;
+    const p1 = section('At a steady 100 req/s', `GET / · ${d0['duration-s']}s per protocol · ${d0.clients} clients × ${d0.rate / d0.clients} req/s · ${d0['load-generator']}`, ks);
+    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+      if (rs.length) percentileChart(el('div', { class: 'panel' }, p1), `${p} · latency by percentile`, rs); });
+    const p2 = section('Tail latency over the run', `Same runs: each second's p99 and slowest request`, ks);
+    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+      if (rs.length) timeChart(el('div', { class: 'panel' }, p2), `${p} · per-second p99 and max`, rs); });
+  }
+
+  const paths = [...new Set(data.flatMap((d) => d.reported ? d.runs.filter((r) => r.mode === 'uncapped').map((r) => r.path) : (d.run.mode === 'uncapped' ? [d.run.path] : [])))];
+  if (paths.length) {
+    const unc = measured.filter((d) => d.run.mode === 'uncapped');
+    const ks = [...new Set([...unc, ...reported].map((d) => seriesKey(d.label)))];
+    const d0 = unc[0] ? unc[0].run : {};
+    const p3 = section('Ceiling: uncapped throughput', `${d0.clients || 50} clients, ${d0.streams || 1} request in flight each · ${d0['duration-s'] || '?'}s per protocol and path`,
+      ks, reported.map((d) => seriesKey(d.label)));
+    const groups = [];
+    paths.forEach((path) => ['h1', 'h2'].forEach((p) => {
+      const bars = [];
+      unc.filter((d) => d.run.path === path).forEach((d) => { const r = resFor(d, p); if (r && r.rps) bars.push({ label: d.label, rps: r.rps }); });
+      reported.forEach((d) => d.runs.filter((r) => r.mode === 'uncapped' && r.path === path && r.protocols.includes(p))
+        .forEach((r) => bars.push({ label: d.label, rps: r.rps, reported: true })));
+      if (bars.length) groups.push({ name: `${p} ${path}`, bars });
+    }));
+    throughputChart(el('div', { class: 'panel' }, p3), 'requests per second', groups);
+    const unr = unc.filter((d) => d.run.path === '/');
+    if (unr.length) {
+      const p4 = section('Latency at the ceiling', 'GET /, uncapped runs above (measured runs only)', [...new Set(unr.map((d) => seriesKey(d.label)))]);
+      protos.forEach((p) => { const rs = unr.map((d) => asRun(d, p)).filter(Boolean);
+        if (rs.length) percentileChart(el('div', { class: 'panel' }, p4), `${p} · latency by percentile`, rs); });
+    }
+  }
+
+  // ---- numbers table ----
+  const ts = el('section', {}, fig);
+  el('h2', {}, ts, 'All runs');
+  const tw = el('div', { class: 'table-wrap' }, ts);
+  const tbl = el('table', {}, tw);
+  const hr = el('tr', {}, el('thead', {}, tbl));
+  ['run', 'mode · path', 'proto', 'req/s', 'p50 ms', 'p99 ms', 'p99.9 ms', 'max ms', 'mean ms', 'alloc/req', 'GCs'].forEach((h) => el('th', {}, hr, h));
+  const tb = el('tbody', {}, tbl);
+  measured.forEach((d) => (d.results || []).forEach((r) => {
+    const q = {}; (r.latency ? r.latency.percentiles : []).forEach((x) => { q[x.p] = x.ms; });
+    const tr = el('tr', {}, tb);
+    [seriesKey(d.label), `${d.run.mode} · ${d.run.path}`, r.protocol, r.rps ? r.rps.toFixed(1) : '–', fmtMs(q[50]), fmtMs(q[99]), fmtMs(q[99.9]), fmtMs(q[100]),
+      r.latency ? fmtMs(r.latency['mean-ms']) : '–', r['bytes-per-request'] ? (r['bytes-per-request'] / 1024).toFixed(1) + 'KB' : '–', r.gcs ?? '–']
+      .forEach((v) => el('td', {}, tr, v));
+  }));
+  reported.forEach((d) => d.runs.forEach((r) => {
+    const tr = el('tr', {}, tb); const kb = (d['kb-per-request'] || {})[r.path];
+    [seriesKey(d.label), `${r.mode} · ${r.path}`, r.protocols.join('+'), (r.mode === 'uncapped' ? '~' : '') + r.rps, '–', '–', '–', '–',
+      r['mean-ms'] != null ? '~' + r['mean-ms'] : '–', kb ? '~' + kb + 'KB' : '–', '–']
+      .forEach((v) => el('td', { class: 'reported' }, tr, v));
+  }));
+  if (reported.length) el('p', { class: 'caveat' }, ts, 'Italic rows are reported summaries (no per-request data): ' + reported.map((d) => d.source).join(' '));
+
+  // ---- systems ----
+  const ss = el('section', {}, fig);
+  el('h2', {}, ss, 'Systems');
+  const cards = el('div', { class: 'cards' }, ss);
+  keys.forEach((k) => {
+    const s = sysOf[k] || {}; const isRep = reported.some((d) => seriesKey(d.label) === k);
+    const c = el('div', { class: 'card' }, cards);
+    const h = el('div', { class: 'legend-item' }, c);
+    const sw = el('span', { class: 'swatch' }, h); sw.style.background = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
+    el('span', { class: 'legend-name' }, h, k);
+    if (isRep) el('span', { class: 'badge' }, c, 'reported, not measured here');
+    const dl = el('dl', {}, c);
+    const freq = s['cpu-max-mhz'] ? `${(s['cpu-max-mhz'] / 1000).toFixed(2)} GHz max` :
+      s['cpu-nominal-ghz'] ? `${s['cpu-nominal-ghz'].toFixed(2)} GHz nominal` + (s['cpu-current-mhz'] ? `, ${Math.round(s['cpu-current-mhz'])} MHz reported` : '') : '';
+    [['CPU', s['cpu-model']], ['Frequency', [freq, s['cpu-freq-note']].filter(Boolean).join('; ')],
+     ['CPUs', s.ncpus != null ? s.ncpus + (s['threads-per-core'] ? ` (${s['threads-per-core']} thread/core)` : '') +
+       (s['performance-cores'] ? ` (${s['performance-cores']}P + ${s['efficiency-cores']}E)` : '') : 'not recorded'],
+     ['OS', s.os], ['Arch', s.arch], ['Memory', s['memory-gb'] ? s['memory-gb'] + ' GB' : null],
+     ['Virtualisation', [s.hypervisor, s.virtualization].filter((v) => v && v !== 'none').join(', ') || 'none'],
+     ['cgroup CPU limit', s['cgroup-cpu-max']], ['h2load', s.h2load], ['jank', s.jank],
+     ['Server commit', commitOf[k] || 'not recorded'],
+     ['Bench checkout', !isRep && s.git ? s.git.sha + (s.git.dirty ? ' (dirty)' : '') : null]]
+      .filter(([, v]) => v).forEach(([k2, v]) => { el('dt', {}, dl, k2); el('dd', {}, dl, v); });
+  });
+})();
+</script>
