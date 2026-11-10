@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- Template for bench.histogram, which fills in the __PLACEHOLDERS__ with static SVG and HTML. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-brrrr latency</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+  }
+  html, body { margin: 0; }
+  .viz-root {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: 14px/1.4 system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; }
+  .panel { margin: 0 0 28px; }
+  .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .panel h2 .key { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .panel .meta { color: var(--text-secondary); font-size: 13px; margin: 0 0 6px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font: 12px system-ui, sans-serif; }
+  .tick { fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .axis-title { fill: var(--text-muted); }
+  .pct-label { fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .hit { fill: transparent; cursor: crosshair; }
+  .tip {
+    position: fixed; pointer-events: none; display: none;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    padding: 8px 10px; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .tip .muted { color: var(--text-secondary); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; font-weight: 600; font-size: 15px; padding: 0 0 8px; }
+  th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 500; }
+  .note { color: var(--text-secondary); font-size: 13px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="wrap">
+    <h1>Latency per request</h1>
+    <p class="sub">__SUBTITLE__</p>
+    __PANELS__
+    __TABLE__
+    <p class="note">Each panel counts requests per latency bucket (20 buckets per decade; both axes log scale, so
+      the slowest few requests stay visible), with markers at p50, p90, p95, p99 and p99.9. Latency is measured by h2load from when a
+      request is sent to the end of its response.</p>
+  </div>
+  <div class="tip" id="tip"></div>
+</div>
+<script>
+// Hover: each bar's full-height hit target carries its tooltip in data-tip.
+const tip = document.getElementById('tip');
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  let left = e.clientX + 14, top = e.clientY + 14;
+  if (left + r.width > innerWidth - 8) left = e.clientX - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = e.clientY - r.height - 14;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+});
+</script>
+</body>
+</html>

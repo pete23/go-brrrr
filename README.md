@@ -120,7 +120,9 @@ the options, and per protocol the summary, latency percentiles and a per-second 
 series. Latency comes from h2load's per-request log (`--log-file`), so percentiles are
 computed the same way on every platform and h2load version. `bb bench:report` charts every
 results file into `bench-results/report.html`, keeping the newest file per label, mode and
-path.
+path. Each run also writes a latency histogram page next to its JSON (same name, `.html`):
+one panel per protocol on log axes, with p50/p90/p95/p99/p99.9 markers and a table.
+`--warmup N` runs N seconds of unmeasured load before each protocol.
 
 ```bash
 bb bench --label macos-m2pro-$(git rev-parse --short HEAD)                     # 60s at 100 req/s
@@ -143,7 +145,7 @@ same host), before and after the allocation work in `eb6e640`:
 | uncapped `/add?a=1&b=2` (h1 / h2) | 22.9k / 22.4k req/s | 34.1k / 31.8k req/s |
 
 M2 Pro (macOS), as reported, summary only: 100.00 req/s with mean ~0.6ms; `GET /` allocates
-~9.7KB and `/add?a=1&b=2` ~17KB per request; uncapped (`h2load -c 50`), ~43k req/s for `/`
+~9.9KB (9.7KB before the crash fix in the commit after `eb6e640`) and `/add?a=1&b=2` ~17KB per request; uncapped (`h2load -c 50`), ~43k req/s for `/`
 and ~25k for `/add` on h1 and h2. Allocation is the limit: jank's GC takes a global lock to
 allocate.
 
@@ -156,8 +158,7 @@ e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
 - `src/go_brrrr/main.jank` – the app: a plain Ring handler plus middleware.
 - `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
   both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
-  header map and method/scheme keywords itself and reusing boxed constants for common
-  header names.
+  header map and method/scheme keywords itself.
 - `src/ring/...` – the parts of ring-core (and ring-codec) ported to jank so far. Each file
   says what changed from upstream. MIT, see `src/ring/LICENSE`.
   - `ring.util.codec`, `.parsing`, `.request`, `.response` (minus file/resource responses),

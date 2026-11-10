@@ -18,10 +18,15 @@
   (see bench.system), the options, and per protocol the summary, latency
   percentiles and a per-second series, computed from h2load's per-request log so
   they mean the same thing whatever the h2load version. `bb bench:report` charts
-  every results file it finds."
+  every results file it finds, and each run also gets a latency histogram page
+  (bench.histogram) next to its JSON.
+
+  --warmup runs that many seconds of unmeasured load before each protocol (for the
+  JVM's JIT, say)."
   (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
             [babashka.process :as p]
+            [bench.histogram :as histogram]
             [bench.system :as system]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -41,7 +46,8 @@
    :streams   {:default 1 :coerce :long :desc "with --uncapped: requests in flight per client (h2load -m)"}
    :label     {:desc "name for this run in results and charts (default: OS and git sha)"}
    :commit    {:desc "commit the server binary was built from (default: this checkout's, for the default binary)"}
-   :out       {:default "bench-results" :desc "directory for the results JSON"}})
+   :out       {:default "bench-results" :desc "directory for the results JSON"}
+   :warmup    {:default 0 :coerce :long :desc "seconds of unmeasured load before each protocol"}})
 
 ;; ---- latency from h2load's per-request log ----
 
@@ -78,6 +84,7 @@
     {:count       (count all)
      :percentiles (into [] (for [p percentiles] {:p p :ms (ms (percentile-of all p))}))
      :mean-ms     (when (seq all) (ms (/ (reduce + all) (count all))))
+     :histogram   (histogram/buckets all)
      :per-second  (->> rows
                        (group-by #(quot (- (first %) t0) 1000000))
                        (sort-by key)
@@ -145,9 +152,14 @@
      :latency-ms (when mean {:min (duration->ms mn) :max (duration->ms mx)
                              :mean (duration->ms mean) :sd (duration->ms sd)})}))
 
-(defn run-one [server proto {:keys [rate duration clients path uncapped streams]}]
+(defn run-one [server proto {:keys [rate duration clients path uncapped streams warmup]}]
   (fs/with-temp-dir [d {}]
     (let [per-client (max 1 (quot rate clients))
+          _    (when (pos? warmup)
+                 (apply p/shell {:out :string :err :string :continue true}
+                        (concat ["h2load"] (proto-flags proto) ["-c" (str clients) "-D" (str warmup)]
+                                (if uncapped ["-m" (str streams)] ["--rps" (str per-client)])
+                                [(str (:base server) path)])))
           log  (str (fs/path d "requests.tsv"))
           argv (concat ["h2load"] (proto-flags proto)
                        ["-c" (str clients) "-D" (str duration) (str "--log-file=" log)]
@@ -182,9 +194,10 @@
 
 (defn report [{:keys [protocol rps target-rps total succeeded latency bytes-per-request gcs]}]
   (let [pct (into {} (map (juxt :p :ms) (:percentiles latency)))]
-    (println (format "%-3s %9.2f req/s (target %s)  %d/%d ok  latency ms p50 %.2f p99 %.2f p99.9 %.2f max %.2f mean %.2f  alloc %s/req, %s GCs"
+    (println (format "%-3s %9.2f req/s (target %s)  %d/%d ok  latency ms p50 %.2f p90 %.2f p95 %.2f p99 %.2f p99.9 %.2f max %.2f mean %.2f  alloc %s/req, %s GCs"
                      protocol (or rps 0.0) (or target-rps "none") (or succeeded 0) (or total 0)
-                     (or (pct 50) 0.0) (or (pct 99) 0.0) (or (pct 99.9) 0.0) (or (pct 100) 0.0)
+                     (or (pct 50) 0.0) (or (pct 90) 0.0) (or (pct 95) 0.0) (or (pct 99) 0.0)
+                     (or (pct 99.9) 0.0) (or (pct 100) 0.0)
                      (or (:mean-ms latency) 0.0)
                      (if bytes-per-request (format "%.1fKB" (/ bytes-per-request 1024.0)) "?")
                      (or gcs "?")))))
@@ -208,7 +221,8 @@
                        :load-generator "h2load on the same host, 1 thread"}
                  :results (mapv #(dissoc % :max-bytes-per-request) results)}
                 {:pretty true}))
-    (println "wrote" file)))
+    (println "wrote" file)
+    (println "wrote" (histogram/write! (str/replace file #"\.json$" ".html") (assoc opts :label label) results))))
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec spec})]

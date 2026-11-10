@@ -143,43 +143,25 @@ namespace ring_h2o
     { brrrr_fail(req); }
   }
 
-  /* Keep o alive for good: an uncollectable cell is scanned by the GC but never freed. */
-  inline object_ref keep(object_ref const o)
-  {
-    new(GC_MALLOC_UNCOLLECTABLE(sizeof(object_ref))) object_ref{ o };
-    return o;
-  }
-
-  /* Values every request would otherwise box afresh. */
+  /* Keywords every request would otherwise intern afresh; the runtime keeps interned keywords
+   * alive. (Caching boxed strings here as well, in GC-uncollectable cells, crashed under load:
+   * the cached objects ended up freed or corrupted.) */
   struct constants_t
   {
-    std::unordered_map<std::string_view, object_ref> header_names;
     std::unordered_map<std::string_view, object_ref> methods;
     object_ref https, http;
-    std::unordered_map<int, object_ref> protocols;
   };
 
   inline constants_t const &constants()
   {
     static constants_t const c{ [] {
       constants_t c;
-      for(char const * const name :
-          { \"accept\", \"accept-encoding\", \"accept-language\", \"authorization\", \"cache-control\",
-            \"connection\", \"content-length\", \"content-type\", \"cookie\", \"dnt\", \"expect\", \"host\",
-            \"if-modified-since\", \"if-none-match\", \"origin\", \"pragma\", \"priority\", \"range\", \"referer\",
-            \"sec-fetch-dest\", \"sec-fetch-mode\", \"sec-fetch-site\", \"sec-fetch-user\", \"te\",
-            \"transfer-encoding\", \"upgrade-insecure-requests\", \"user-agent\", \"x-forwarded-for\",
-            \"x-forwarded-proto\", \"x-request-id\" })
-      { c.header_names.emplace(name, keep(make_box(name).erase())); }
       for(auto const &[upper, lower] :
           { std::pair{ \"GET\", \"get\" }, { \"HEAD\", \"head\" }, { \"POST\", \"post\" }, { \"PUT\", \"put\" },
             { \"DELETE\", \"delete\" }, { \"OPTIONS\", \"options\" }, { \"PATCH\", \"patch\" } })
       { c.methods.emplace(upper, __rt_ctx->intern_keyword(lower).expect_ok().erase()); }
       c.https = __rt_ctx->intern_keyword(\"https\").expect_ok().erase();
       c.http = __rt_ctx->intern_keyword(\"http\").expect_ok().erase();
-      for(auto const &[version, name] :
-          { std::pair{ 256, \"HTTP/1.0\" }, { 257, \"HTTP/1.1\" }, { 512, \"HTTP/2.0\" }, { 768, \"HTTP/3.0\" } })
-      { c.protocols.emplace(version, keep(make_box(name).erase())); }
       return c;
     }() };
     return c;
@@ -208,17 +190,20 @@ namespace ring_h2o
 
   inline object_ref protocol(int const version)
   {
-    auto const &c{ constants() };
-    if(auto const it{ c.protocols.find(version) }; it != c.protocols.end())
-    { return it->second; }
-    return make_box(jtl::immutable_string_view{ \"HTTP/\" + std::to_string(version) }).erase();
+    switch(version)
+    {
+      case 256: return make_box(\"HTTP/1.0\").erase();
+      case 257: return make_box(\"HTTP/1.1\").erase();
+      case 512: return make_box(\"HTTP/2.0\").erase();
+      case 768: return make_box(\"HTTP/3.0\").erase();
+      default: return make_box(jtl::immutable_string_view{ \"HTTP/\" + std::to_string(version) }).erase();
+    }
   }
 
   /* The Ring header map. h2o has lowercased the names; repeated headers are joined with
    * commas, as other Ring adapters do. */
   inline object_ref header_map(brrrr_request_t const * const req)
   {
-    auto const &c{ constants() };
     std::vector<std::pair<std::string_view, std::string>> joined;
     joined.reserve(req->num_headers);
     for(size_t i{}; i < req->num_headers; ++i)
@@ -237,10 +222,8 @@ namespace ring_h2o
     object_ref m{ transient(obj::persistent_array_map::empty().erase()) };
     for(auto const &[name, value] : joined)
     {
-      auto const known{ c.header_names.find(name) };
       m = assoc_in_place(m,
-                         known == c.header_names.end() ? make_box(jtl::immutable_string_view{ name }).erase()
-                                                       : known->second,
+                         make_box(jtl::immutable_string_view{ name }).erase(),
                          make_box(jtl::immutable_string_view{ value }).erase());
     }
     return persistent(m);
