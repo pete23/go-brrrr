@@ -165,6 +165,17 @@ response when it ends, into `~/bin/h3load`. `bb bench` uses it for h3 when it's 
 h3 is skipped) and, at a fixed rate, keeps `--h3-streams` (default 8) requests in flight
 per client so waiting for ACKs doesn't throttle it.
 
+### The reference h2o app
+
+`reference/h2o_ref.cc` is the same API written directly against libh2o in C++: no jank,
+no Ring, no worker threads; one event loop serving h1 and h2 over TLS and handling every
+request inline, as an h2o application normally would. It's the ceiling for this server
+stack. Its responses match the JVM version's status codes on every case we checked,
+including its errors (a repeated parameter, or a sum that overflows, is a 500, as
+`parse-long` and `+` throw on the JVM). `bb build:ref` builds it at
+`target/reference/h2o-ref` against the same libh2o; `bb bench:ref` benchmarks it (h2 only
+by default; labelled `<os>-h2o-ref-<sha>`). It has no GC, so allocation shows as `?`.
+
 ### The JVM version, for comparison
 
 `jvm/` is the same app on the JVM: `src/go_brrrr/main.jank`'s handler and middleware with
@@ -179,6 +190,7 @@ leaves out h2o, which uses malloc rather than the GC.
 
 - `src/go_brrrr/main.jank` – the app: a plain Ring handler plus middleware.
 - `jvm/` – the same app in Clojure on the JVM (Jetty), for comparison.
+- `reference/` – the same API in C++ directly on libh2o, the benchmark ceiling.
 - `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
   both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
   header map and method/scheme keywords itself.
@@ -257,6 +269,16 @@ Until jank has protocols and streams:
 - jank's JIT can't link TLS relocations (local-dynamic, initial-exec) from static archives,
   and `jank compile` loads previously cached module objects into that JIT. See "How it
   builds" for how this project copes.
+- `parse-long` accepts leading whitespace: `(parse-long " 5")` is 5 where Clojure gives nil,
+  so `/add?a=+5&b=1` (the `+` decodes to a space) answers 6 where the JVM answers 400.
+- `+` on longs wraps silently on overflow where Clojure throws `ArithmeticException`, so
+  `/add?a=9223372036854775807&b=1` answers -9223372036854775808 where the JVM answers 500.
+- `clojure.string/lower-case` builds a `std::locale` per call; on macOS that takes a
+  process-wide lock (it capped this server at ~6k req/s). Lowercase ASCII tokens by hand.
+- On macOS, C's `isalnum` and friends are locale-dependent and say yes to UTF-8 lead bytes.
+- Boxed objects cached across requests in `GC_MALLOC_UNCOLLECTABLE` cells ended up freed
+  or corrupted under sustained load (a segfault in map key comparison). Interned keywords
+  are fine to cache; box strings per request.
 
 ## h2o gotchas found so far
 

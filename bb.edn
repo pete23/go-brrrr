@@ -83,6 +83,36 @@
    :requires ([bench.report :as report])
    :task     (apply report/-main *command-line-args*)}
 
+  build:ref
+  {:doc     "The reference h2o app (reference/h2o_ref.cc) at target/reference/h2o-ref"
+   :depends [build]
+   :task    (let [bin "target/reference/h2o-ref"
+                  lib (first (fs/glob "target/release/_cache" "go-brrrr-out-*/lib"))
+                  ssl (or (System/getenv "OPENSSL_ROOT_DIR")
+                          (some (fn [p] (when (fs/exists? (fs/path p "include" "openssl" "ssl.h")) (str p)))
+                                ["/opt/homebrew/opt/openssl@3" "/usr/local/opt/openssl@3"]))]
+              (if (and (fs/exists? bin) (empty? (fs/modified-since bin ["reference" (str lib)])))
+                (println bin "is up to date")
+                (do (fs/create-dirs "target/reference")
+                    (apply shell "clang++" "-O2" "-std=c++20" "-pthread" "-Wall" "-Wextra"
+                           "-Wno-unused-parameter" "-Wno-missing-field-initializers"
+                           "-DH2O_USE_LIBUV=0" "-DQUICLY_USE_TRACER=1"
+                           "-Ivendor/h2o/include" "-Ivendor/h2o/deps/picotls/include"
+                           "-Ivendor/h2o/deps/quicly/include"
+                           (concat (when ssl [(str "-I" ssl "/include")])
+                                   ["reference/h2o_ref.cc" "-o" bin (str (fs/path lib "libh2o-evloop.a"))]
+                                   (when ssl [(str "-L" ssl "/lib")])
+                                   ["-lssl" "-lcrypto" "-lz" "-lm"])))))}
+
+  bench:ref
+  {:doc      "The same load test against the reference h2o app, h2 only by default: bb bench:ref [options]"
+   :depends  [build:ref cert]
+   :requires ([bench.load :as load])
+   :task     (let [sha (str/trim (:out (shell {:out :string} "git rev-parse --short HEAD")))
+                   os  (if (str/includes? (System/getProperty "os.name") "Mac") "macos" "linux")]
+               (apply load/-main "--binary" "target/reference/h2o-ref" "--label" (str os "-h2o-ref-" sha)
+                      "--commit" sha "--protocols" "h2" *command-line-args*))}
+
   bench:jvm
   {:doc      "The same load test against the JVM version (jvm/), labelled <os>-jvm-<sha>: bb bench:jvm [options]"
    :depends  [keystore]
