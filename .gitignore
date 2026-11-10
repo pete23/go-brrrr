@@ -2,3 +2,4 @@ target/
 certs/
 .lein-*
 .nrepl-port
+.cpcache/
