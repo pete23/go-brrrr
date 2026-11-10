@@ -1,0 +1,43 @@
+--- a/src/h2load.h
++++ b/src/h2load.h
+@@ -181,6 +181,10 @@
+   std::chrono::system_clock::time_point request_wall_time;
+   // time point when stream was closed
+   std::chrono::steady_clock::time_point stream_close_time;
++  // h3load: time point when the response ended (END_STREAM received), which
++  // can be well before the stream closes: closing also waits for the peer to
++  // acknowledge the request, and peers delay ACKs (up to max_ack_delay).
++  std::chrono::steady_clock::time_point response_end_time;
+   // upload data length sent so far
+   int64_t data_offset;
+   // HTTP status code
+--- a/src/h2load.cc
++++ b/src/h2load.cc
+@@ -1115,7 +1115,10 @@
+       return;
+     }
+ 
+-    req_stat->stream_close_time = std::chrono::steady_clock::now();
++    req_stat->stream_close_time =
++      req_stat->response_end_time != std::chrono::steady_clock::time_point{}
++        ? req_stat->response_end_time
++        : std::chrono::steady_clock::now();
+     if (success) {
+       req_stat->completed = true;
+       ++worker->stats.req_success;
+--- a/src/h2load_http3_session.cc
++++ b/src/h2load_http3_session.cc
+@@ -168,7 +168,12 @@
+ }
+ } // namespace
+ 
+-void Http3Session::end_stream(int64_t stream_id) { client_->record_ttfb(); }
++void Http3Session::end_stream(int64_t stream_id) {
++  client_->record_ttfb();
++  if (auto req_stat = client_->get_req_stat(stream_id)) {
++    req_stat->response_end_time = std::chrono::steady_clock::now();
++  }
++}
+ 
+ namespace {
+ int recv_data(nghttp3_conn *conn, int64_t stream_id, const uint8_t *data,

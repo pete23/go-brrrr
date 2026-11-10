@@ -105,8 +105,8 @@ bb bench --protocols h2 --path '/add?a=1&b=2'
 It prints achieved req/s, latency (min/mean/max/sd), and bytes the server allocated per
 request and GCs run, per protocol. It fails if any request fails, any response isn't 2xx, the
 rate falls more than 5% short, the server dies, or allocation exceeds
-`--max-bytes-per-request` when given. HTTP/3 runs only if your h2load was built with QUIC
-support (it probes with one request; Ubuntu's isn't; neither is Homebrew's).
+`--max-bytes-per-request` when given. HTTP/3 runs only with h3load (see below); it probes
+with one request and skips h3 otherwise.
 
 The allocation figure comes from the server: with `BRRRR_STATS` set in its environment (the
 bench sets it), `GET /_brrrr/stats` is answered by the adapter's C++ bridge, without reaching
@@ -152,6 +152,18 @@ allocate.
 For finding the ceiling rather than holding a rate, drop `--rps` and use h2load directly,
 e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
 `target/release/go-brrrr`.
+
+### HTTP/3: h3load
+
+Homebrew's and Ubuntu's h2load have no HTTP/3, and stock h2load's HTTP/3 latencies are
+wrong anyway: it times a request when its stream *closes*, which in QUIC also waits for the
+server to acknowledge the request, and servers delay ACKs by up to `max_ack_delay` (25ms
+here). A sub-millisecond response then shows as anything up to ~27ms, and since h2load only
+starts the next request on close, one stream per connection manages ~40 req/s.
+`tools/build-h3load.sh` builds h2load with HTTP/3 and `tools/h3load.patch`, which times a
+response when it ends, into `~/bin/h3load`. `bb bench` uses it for h3 when it's there (else
+h3 is skipped) and, at a fixed rate, keeps `--h3-streams` (default 8) requests in flight
+per client so waiting for ACKs doesn't throttle it.
 
 ### The JVM version, for comparison
 

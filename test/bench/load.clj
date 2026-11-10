@@ -47,7 +47,19 @@
    :label     {:desc "name for this run in results and charts (default: OS and git sha)"}
    :commit    {:desc "commit the server binary was built from (default: this checkout's, for the default binary)"}
    :out       {:default "bench-results" :desc "directory for the results JSON"}
-   :warmup    {:default 0 :coerce :long :desc "seconds of unmeasured load before each protocol"}})
+   :warmup    {:default 0 :coerce :long :desc "seconds of unmeasured load before each protocol"}
+   :h3-streams {:default 8 :coerce :long :desc "h3 at a fixed rate: requests in flight per client (see h3load)"}})
+
+(defn h3load
+  "The load generator for h3: h3load (h2load built with HTTP/3 and patched to time a
+  response when it ends rather than when its stream closes, which also waits for the
+  server to acknowledge the request: up to its max_ack_delay, 25ms by default) if it
+  is on the PATH or in ~/bin, else h2load."
+  []
+  (or (some-> (or (fs/which "h3load") (fs/which (fs/path (fs/home) "bin" "h3load"))) str)
+      "h2load"))
+
+(defn- load-cmd [proto] (if (= "h3" proto) (h3load) "h2load"))
 
 ;; ---- latency from h2load's per-request log ----
 
@@ -107,7 +119,7 @@
   fail. So probe with one real request."
   [server]
   (let [{:keys [out]} (p/shell {:out :string :err :string :continue true}
-                               "h2load" "--alpn-list=h3" "-n" "1" (str (:base server) "/"))]
+                               (h3load) "--alpn-list=h3" "-n" "1" (str (:base server) "/"))]
     (str/includes? out "1 succeeded")))
 
 (def proto-flags
@@ -152,18 +164,27 @@
      :latency-ms (when mean {:min (duration->ms mn) :max (duration->ms mx)
                              :mean (duration->ms mean) :sd (duration->ms sd)})}))
 
-(defn run-one [server proto {:keys [rate duration clients path uncapped streams warmup]}]
+(defn- rate-flags
+  "Uncapped: `streams` in flight per client. At a fixed rate, one at a time, except
+  for h3: a client can't open the next stream until the server has acknowledged the
+  last, so it needs a few in flight to keep up."
+  [proto uncapped streams per-client h3-streams]
+  (if uncapped
+    ["-m" (str streams)]
+    (cond-> ["--rps" (str per-client)] (= "h3" proto) (into ["-m" (str h3-streams)]))))
+
+(defn run-one [server proto {:keys [rate duration clients path uncapped streams warmup h3-streams]}]
   (fs/with-temp-dir [d {}]
     (let [per-client (max 1 (quot rate clients))
           _    (when (pos? warmup)
                  (apply p/shell {:out :string :err :string :continue true}
-                        (concat ["h2load"] (proto-flags proto) ["-c" (str clients) "-D" (str warmup)]
-                                (if uncapped ["-m" (str streams)] ["--rps" (str per-client)])
+                        (concat [(load-cmd proto)] (proto-flags proto) ["-c" (str clients) "-D" (str warmup)]
+                                (rate-flags proto uncapped streams per-client h3-streams)
                                 [(str (:base server) path)])))
           log  (str (fs/path d "requests.tsv"))
-          argv (concat ["h2load"] (proto-flags proto)
+          argv (concat [(load-cmd proto)] (proto-flags proto)
                        ["-c" (str clients) "-D" (str duration) (str "--log-file=" log)]
-                       (if uncapped ["-m" (str streams)] ["--rps" (str per-client)])
+                       (rate-flags proto uncapped streams per-client h3-streams)
                        [(str (:base server) path)])
           before (stats server)
           {:keys [out err exit]} (apply p/shell {:out :string :err :string :continue true} argv)
@@ -232,7 +253,7 @@
               h3?       (and (some #{"h3"} requested) (h3-supported? h/*server*))
               protocols (cond->> requested (not h3?) (remove #{"h3"}))
               _         (when (and (some #{"h3"} requested) (not h3?))
-                          (println "skipping h3: this h2load was built without QUIC support"))
+                          (println "skipping h3: no h3load, or the server or h2load can't do HTTP/3"))
               results (doall
                        (for [proto protocols]
                          (do (println (if (:uncapped opts)

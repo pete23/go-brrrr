@@ -1,0 +1,118 @@
+<!doctype html>
+<!-- Template for bench.histogram, which fills in the __PLACEHOLDERS__ with static SVG and HTML. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>go-brrrr latency</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+  }
+  html, body { margin: 0; }
+  .viz-root {
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: 14px/1.4 system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); margin: 0 0 20px; }
+  .panel { margin: 0 0 28px; }
+  .panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+  .panel h2 .key { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .panel .meta { color: var(--text-secondary); font-size: 13px; margin: 0 0 6px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font: 12px system-ui, sans-serif; }
+  .tick { fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .axis-title { fill: var(--text-muted); }
+  .pct-label { fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .hit { fill: transparent; cursor: crosshair; }
+  .tip {
+    position: fixed; pointer-events: none; display: none;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    padding: 8px 10px; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .tip .muted { color: var(--text-secondary); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; font-weight: 600; font-size: 15px; padding: 0 0 8px; }
+  th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 500; }
+  .note { color: var(--text-secondary); font-size: 13px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="wrap">
+    <h1>Latency per request</h1>
+    <p class="sub">macos-m2pro-1cdb553-extended-h3: GET / at 5,000 req/s over 50 connections, 300s per protocol after 10s warm-up (2026-11-10 06:26)</p>
+    <section class='panel'><h2><span class='key' style='background:var(--series-3)'></span>HTTP/3</h2><p class='meta'>1,499,974 requests · p50 1.04 ms · p99.9 5.71 ms · max 11.6 ms</p><svg viewBox='0 0 860 280' role='img' aria-label='Latency histogram for HTTP/3'><line x1='52' x2='844' y1='240.0' y2='240.0' stroke='var(--axis)'/><text x='52' y='86' text-anchor='end' class='axis-title'>requests</text><line x1='52' x2='844' y1='233.1' y2='233.1' stroke='var(--grid)'/><text x='44' y='237.1' text-anchor='end' class='tick'>1</text><line x1='52' x2='844' y1='210.3' y2='210.3' stroke='var(--grid)'/><text x='44' y='214.3' text-anchor='end' class='tick'>10</text><line x1='52' x2='844' y1='187.4' y2='187.4' stroke='var(--grid)'/><text x='44' y='191.4' text-anchor='end' class='tick'>100</text><line x1='52' x2='844' y1='164.6' y2='164.6' stroke='var(--grid)'/><text x='44' y='168.6' text-anchor='end' class='tick'>1k</text><line x1='52' x2='844' y1='141.7' y2='141.7' stroke='var(--grid)'/><text x='44' y='145.7' text-anchor='end' class='tick'>10k</text><line x1='52' x2='844' y1='118.9' y2='118.9' stroke='var(--grid)'/><text x='44' y='122.9' text-anchor='end' class='tick'>100k</text><line x1='52' x2='844' y1='96.0' y2='96.0' stroke='var(--grid)'/><text x='44' y='100.0' text-anchor='end' class='tick'>1M</text><line x1='52.5' x2='52.5' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='52.5' y='258.0' text-anchor='middle' class='tick'>0.2</text><line x1='227.5' x2='227.5' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='227.5' y='258.0' text-anchor='middle' class='tick'>0.5</text><line x1='360.0' x2='360.0' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='360.0' y='258.0' text-anchor='middle' class='tick'>1</text><line x1='492.5' x2='492.5' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='492.5' y='258.0' text-anchor='middle' class='tick'>2</text><line x1='667.5' x2='667.5' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='667.5' y='258.0' text-anchor='middle' class='tick'>5</text><line x1='800.0' x2='800.0' y1='240.0' y2='244.0' stroke='var(--axis)'/><text x='800.0' y='258.0' text-anchor='middle' class='tick'>10</text><path fill='var(--series-3)' d='M53.0,240.0 V212.5 Q53.0,208.5 57.0,208.5 H69.0 Q73.0,208.5 73.0,212.5 V240.0 Z'/><rect class='hit' x='52.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.200–0.224 ms&lt;/b&gt;&lt;br&gt;12 requests (0.00080%)&lt;br&gt;&lt;span class='muted'&gt;0.00080% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M75.0,240.0 V197.5 Q75.0,193.5 79.0,193.5 H91.0 Q95.0,193.5 95.0,197.5 V240.0 Z'/><rect class='hit' x='74.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.224–0.251 ms&lt;/b&gt;&lt;br&gt;54 requests (0.0036%)&lt;br&gt;&lt;span class='muted'&gt;0.0044% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M97.0,240.0 V186.4 Q97.0,182.4 101.0,182.4 H113.0 Q117.0,182.4 117.0,186.4 V240.0 Z'/><rect class='hit' x='96.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.251–0.282 ms&lt;/b&gt;&lt;br&gt;166 requests (0.011%)&lt;br&gt;&lt;span class='muted'&gt;0.015% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M119.0,240.0 V179.4 Q119.0,175.4 123.0,175.4 H135.0 Q139.0,175.4 139.0,179.4 V240.0 Z'/><rect class='hit' x='118.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.282–0.316 ms&lt;/b&gt;&lt;br&gt;336 requests (0.022%)&lt;br&gt;&lt;span class='muted'&gt;0.038% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M141.0,240.0 V174.1 Q141.0,170.1 145.0,170.1 H157.0 Q161.0,170.1 161.0,174.1 V240.0 Z'/><rect class='hit' x='140.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.316–0.355 ms&lt;/b&gt;&lt;br&gt;571 requests (0.038%)&lt;br&gt;&lt;span class='muted'&gt;0.076% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M163.0,240.0 V161.8 Q163.0,157.8 167.0,157.8 H179.0 Q183.0,157.8 183.0,161.8 V240.0 Z'/><rect class='hit' x='162.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.355–0.398 ms&lt;/b&gt;&lt;br&gt;1,974 requests (0.13%)&lt;br&gt;&lt;span class='muted'&gt;0.21% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M185.0,240.0 V143.1 Q185.0,139.1 189.0,139.1 H201.0 Q205.0,139.1 205.0,143.1 V240.0 Z'/><rect class='hit' x='184.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.398–0.447 ms&lt;/b&gt;&lt;br&gt;12,994 requests (0.87%)&lt;br&gt;&lt;span class='muted'&gt;1.07% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M207.0,240.0 V130.7 Q207.0,126.7 211.0,126.7 H223.0 Q227.0,126.7 227.0,130.7 V240.0 Z'/><rect class='hit' x='206.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.447–0.501 ms&lt;/b&gt;&lt;br&gt;45,419 requests (3.03%)&lt;br&gt;&lt;span class='muted'&gt;4.10% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M229.0,240.0 V125.0 Q229.0,121.0 233.0,121.0 H245.0 Q249.0,121.0 249.0,125.0 V240.0 Z'/><rect class='hit' x='228.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.501–0.562 ms&lt;/b&gt;&lt;br&gt;80,743 requests (5.38%)&lt;br&gt;&lt;span class='muted'&gt;9.48% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M251.0,240.0 V125.1 Q251.0,121.1 255.0,121.1 H267.0 Q271.0,121.1 271.0,125.1 V240.0 Z'/><rect class='hit' x='250.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.562–0.631 ms&lt;/b&gt;&lt;br&gt;79,520 requests (5.30%)&lt;br&gt;&lt;span class='muted'&gt;14.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M273.0,240.0 V124.4 Q273.0,120.4 277.0,120.4 H289.0 Q293.0,120.4 293.0,124.4 V240.0 Z'/><rect class='hit' x='272.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.631–0.708 ms&lt;/b&gt;&lt;br&gt;85,528 requests (5.70%)&lt;br&gt;&lt;span class='muted'&gt;20.5% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M295.0,240.0 V122.2 Q295.0,118.2 299.0,118.2 H311.0 Q315.0,118.2 315.0,122.2 V240.0 Z'/><rect class='hit' x='294.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.708–0.794 ms&lt;/b&gt;&lt;br&gt;106,502 requests (7.10%)&lt;br&gt;&lt;span class='muted'&gt;27.6% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M317.0,240.0 V120.3 Q317.0,116.3 321.0,116.3 H333.0 Q337.0,116.3 337.0,120.3 V240.0 Z'/><rect class='hit' x='316.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.794–0.891 ms&lt;/b&gt;&lt;br&gt;129,131 requests (8.61%)&lt;br&gt;&lt;span class='muted'&gt;36.2% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M339.0,240.0 V118.6 Q339.0,114.6 343.0,114.6 H355.0 Q359.0,114.6 359.0,118.6 V240.0 Z'/><rect class='hit' x='338.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;0.891–1.00 ms&lt;/b&gt;&lt;br&gt;152,995 requests (10.2%)&lt;br&gt;&lt;span class='muted'&gt;46.4% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M361.0,240.0 V117.9 Q361.0,113.9 365.0,113.9 H377.0 Q381.0,113.9 381.0,117.9 V240.0 Z'/><rect class='hit' x='360.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.00–1.12 ms&lt;/b&gt;&lt;br&gt;164,002 requests (10.9%)&lt;br&gt;&lt;span class='muted'&gt;57.3% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M383.0,240.0 V117.8 Q383.0,113.8 387.0,113.8 H399.0 Q403.0,113.8 403.0,117.8 V240.0 Z'/><rect class='hit' x='382.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.12–1.26 ms&lt;/b&gt;&lt;br&gt;165,981 requests (11.1%)&lt;br&gt;&lt;span class='muted'&gt;68.4% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M405.0,240.0 V117.3 Q405.0,113.3 409.0,113.3 H421.0 Q425.0,113.3 425.0,117.3 V240.0 Z'/><rect class='hit' x='404.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.26–1.41 ms&lt;/b&gt;&lt;br&gt;174,168 requests (11.6%)&lt;br&gt;&lt;span class='muted'&gt;80.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M427.0,240.0 V118.3 Q427.0,114.3 431.0,114.3 H443.0 Q447.0,114.3 447.0,118.3 V240.0 Z'/><rect class='hit' x='426.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.41–1.58 ms&lt;/b&gt;&lt;br&gt;157,439 requests (10.5%)&lt;br&gt;&lt;span class='muted'&gt;90.5% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M449.0,240.0 V123.0 Q449.0,119.0 453.0,119.0 H465.0 Q469.0,119.0 469.0,123.0 V240.0 Z'/><rect class='hit' x='448.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.58–1.78 ms&lt;/b&gt;&lt;br&gt;98,167 requests (6.54%)&lt;br&gt;&lt;span class='muted'&gt;97.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M471.0,240.0 V133.9 Q471.0,129.9 475.0,129.9 H487.0 Q491.0,129.9 491.0,133.9 V240.0 Z'/><rect class='hit' x='470.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;1.78–2.00 ms&lt;/b&gt;&lt;br&gt;32,964 requests (2.20%)&lt;br&gt;&lt;span class='muted'&gt;99.2% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M493.0,240.0 V151.5 Q493.0,147.5 497.0,147.5 H509.0 Q513.0,147.5 513.0,151.5 V240.0 Z'/><rect class='hit' x='492.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;2.00–2.24 ms&lt;/b&gt;&lt;br&gt;5,604 requests (0.37%)&lt;br&gt;&lt;span class='muted'&gt;99.6% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M515.0,240.0 V168.0 Q515.0,164.0 519.0,164.0 H531.0 Q535.0,164.0 535.0,168.0 V240.0 Z'/><rect class='hit' x='514.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;2.24–2.51 ms&lt;/b&gt;&lt;br&gt;1,058 requests (0.071%)&lt;br&gt;&lt;span class='muted'&gt;99.7% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M537.0,240.0 V171.8 Q537.0,167.8 541.0,167.8 H553.0 Q557.0,167.8 557.0,171.8 V240.0 Z'/><rect class='hit' x='536.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;2.51–2.82 ms&lt;/b&gt;&lt;br&gt;724 requests (0.048%)&lt;br&gt;&lt;span class='muted'&gt;99.7% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M559.0,240.0 V179.8 Q559.0,175.8 563.0,175.8 H575.0 Q579.0,175.8 579.0,179.8 V240.0 Z'/><rect class='hit' x='558.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;2.82–3.16 ms&lt;/b&gt;&lt;br&gt;321 requests (0.021%)&lt;br&gt;&lt;span class='muted'&gt;99.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M581.0,240.0 V191.1 Q581.0,187.1 585.0,187.1 H597.0 Q601.0,187.1 601.0,191.1 V240.0 Z'/><rect class='hit' x='580.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;3.16–3.55 ms&lt;/b&gt;&lt;br&gt;103 requests (0.0069%)&lt;br&gt;&lt;span class='muted'&gt;99.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M603.0,240.0 V205.6 Q603.0,201.6 607.0,201.6 H619.0 Q623.0,201.6 623.0,205.6 V240.0 Z'/><rect class='hit' x='602.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;3.55–3.98 ms&lt;/b&gt;&lt;br&gt;24 requests (0.0016%)&lt;br&gt;&lt;span class='muted'&gt;99.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M625.0,240.0 V192.5 Q625.0,188.5 629.0,188.5 H641.0 Q645.0,188.5 645.0,192.5 V240.0 Z'/><rect class='hit' x='624.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;3.98–4.47 ms&lt;/b&gt;&lt;br&gt;90 requests (0.0060%)&lt;br&gt;&lt;span class='muted'&gt;99.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M647.0,240.0 V175.8 Q647.0,171.8 651.0,171.8 H663.0 Q667.0,171.8 667.0,175.8 V240.0 Z'/><rect class='hit' x='646.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;4.47–5.01 ms&lt;/b&gt;&lt;br&gt;483 requests (0.032%)&lt;br&gt;&lt;span class='muted'&gt;99.8% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M669.0,240.0 V167.2 Q669.0,163.2 673.0,163.2 H685.0 Q689.0,163.2 689.0,167.2 V240.0 Z'/><rect class='hit' x='668.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;5.01–5.62 ms&lt;/b&gt;&lt;br&gt;1,143 requests (0.076%)&lt;br&gt;&lt;span class='muted'&gt;99.9% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M691.0,240.0 V165.0 Q691.0,161.0 695.0,161.0 H707.0 Q711.0,161.0 711.0,165.0 V240.0 Z'/><rect class='hit' x='690.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;5.62–6.31 ms&lt;/b&gt;&lt;br&gt;1,426 requests (0.095%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M713.0,240.0 V181.2 Q713.0,177.2 717.0,177.2 H729.0 Q733.0,177.2 733.0,181.2 V240.0 Z'/><rect class='hit' x='712.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;6.31–7.08 ms&lt;/b&gt;&lt;br&gt;280 requests (0.019%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M735.0,240.0 V201.8 Q735.0,197.8 739.0,197.8 H751.0 Q755.0,197.8 755.0,201.8 V240.0 Z'/><rect class='hit' x='734.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;7.08–7.94 ms&lt;/b&gt;&lt;br&gt;35 requests (0.0023%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M757.0,240.0 V219.3 Q757.0,215.3 761.0,215.3 H773.0 Q777.0,215.3 777.0,219.3 V240.0 Z'/><rect class='hit' x='756.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;7.94–8.91 ms&lt;/b&gt;&lt;br&gt;6 requests (0.00040%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M779.0,240.0 V226.2 Q779.0,222.2 783.0,222.2 H795.0 Q799.0,222.2 799.0,226.2 V240.0 Z'/><rect class='hit' x='778.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;8.91–10.0 ms&lt;/b&gt;&lt;br&gt;3 requests (0.00020%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M801.0,240.0 V219.3 Q801.0,215.3 805.0,215.3 H817.0 Q821.0,215.3 821.0,219.3 V240.0 Z'/><rect class='hit' x='800.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;10.0–11.2 ms&lt;/b&gt;&lt;br&gt;6 requests (0.00040%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><path fill='var(--series-3)' d='M823.0,240.0 V230.2 Q823.0,226.2 827.0,226.2 H839.0 Q843.0,226.2 843.0,230.2 V240.0 Z'/><rect class='hit' x='822.0' y='96' width='22.0' height='144' data-tip="&lt;b&gt;11.2–12.6 ms&lt;/b&gt;&lt;br&gt;2 requests (0.00013%)&lt;br&gt;&lt;span class='muted'&gt;100.0% at or below&lt;/span&gt;"/><line x1='367.3' x2='367.3' y1='20' y2='240.0' stroke='var(--text-muted)' stroke-dasharray='3 3'/><text x='372.3' y='16' text-anchor='start' class='pct-label'>p50 1.04 ms</text><line x1='446.7' x2='446.7' y1='36' y2='240.0' stroke='var(--text-muted)' stroke-dasharray='3 3'/><text x='451.7' y='32' text-anchor='start' class='pct-label'>p90 1.57 ms</text><line x1='461.1' x2='461.1' y1='52' y2='240.0' stroke='var(--text-muted)' stroke-dasharray='3 3'/><text x='466.1' y='48' text-anchor='start' class='pct-label'>p95 1.70 ms</text><line x1='487.2' x2='487.2' y1='68' y2='240.0' stroke='var(--text-muted)' stroke-dasharray='3 3'/><text x='492.2' y='64' text-anchor='start' class='pct-label'>p99 1.95 ms</text><line x1='692.9' x2='692.9' y1='84' y2='240.0' stroke='var(--text-muted)' stroke-dasharray='3 3'/><text x='697.9' y='80' text-anchor='start' class='pct-label'>p99.9 5.71 ms</text><text x='448' y='276' text-anchor='middle' class='axis-title'>latency (ms, log scale)</text></svg></section>
+    <table><caption>Percentiles (ms)</caption><thead><tr><th>Protocol</th><th>Requests</th><th>p50</th><th>p90</th><th>p95</th><th>p99</th><th>p99.9</th><th>max</th></tr></thead><tbody><tr><td>HTTP/3</td><td>1,499,974</td><td>1.04</td><td>1.57</td><td>1.70</td><td>1.95</td><td>5.71</td><td>11.6</td></tr></tbody></table>
+    <p class="note">Each panel counts requests per latency bucket (20 buckets per decade; both axes log scale, so
+      the slowest few requests stay visible), with markers at p50, p90, p95, p99 and p99.9. Latency is measured by h2load from when a
+      request is sent to the end of its response.</p>
+  </div>
+  <div class="tip" id="tip"></div>
+</div>
+<script>
+// Hover: each bar's full-height hit target carries its tooltip in data-tip.
+const tip = document.getElementById('tip');
+document.addEventListener('mousemove', e => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t) { tip.style.display = 'none'; return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  let left = e.clientX + 14, top = e.clientY + 14;
+  if (left + r.width > innerWidth - 8) left = e.clientX - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = e.clientY - r.height - 14;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+});
+</script>
+</body>
+</html>
