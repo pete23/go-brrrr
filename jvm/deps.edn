@@ -1,0 +1,6 @@
+;; The same app on the JVM, for comparison: Clojure, ring-core and Jetty 12 (h1 + h2 over TLS).
+{:paths ["src"]
+ :deps  {org.clojure/clojure                  {:mvn/version "1.12.6"}
+         ring/ring-core                       {:mvn/version "1.15.6"}
+         info.sunng/ring-jetty9-adapter       {:mvn/version "0.40.6"}
+         info.sunng/ring-jetty9-adapter-http2 {:mvn/version "0.2.11"}}}

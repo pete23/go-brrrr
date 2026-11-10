@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Starts the JVM version on the given port (default 8443); bb bench:jvm runs it.
+set -euo pipefail
+cd "$(dirname "$0")"
+# macOS: Homebrew's openjdk is keg-only, so the Clojure CLI won't find it by itself.
+if [ -z "${JAVA_HOME:-}" ] && ! /usr/libexec/java_home >/dev/null 2>&1; then
+  for jdk in /opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home \
+             /usr/local/opt/openjdk/libexec/openjdk.jdk/Contents/Home; do
+    if [ -x "$jdk/bin/java" ]; then export JAVA_HOME="$jdk"; break; fi
+  done
+fi
+exec clojure -M -m go-brrrr.jvm "$@"

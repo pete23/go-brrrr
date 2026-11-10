@@ -1,6 +1,6 @@
 {:paths ["test"]
  :tasks
- {:requires ([babashka.fs :as fs])
+ {:requires ([babashka.fs :as fs] [clojure.string :as str])
 
   submodules
   {:doc  "Fetch vendor/h2o if needed (jank-build.bb runs sandboxed, without network)"
@@ -21,6 +21,14 @@
            (shell "openssl ecparam -name prime256v1 -genkey -noout -out certs/key.pem")
            (shell (str "openssl req -new -x509 -days 365 -key certs/key.pem -out certs/cert.pem"
                        " -config certs/openssl.cnf -extensions v3")))}
+
+  keystore
+  {:doc     "The dev certificate as a PKCS12 keystore, for the JVM version"
+   :depends [cert]
+   :task    (when-not (fs/exists? "certs/keystore.p12")
+              (shell (str "openssl pkcs12 -export -in certs/cert.pem -inkey certs/key.pem -name localhost"
+                          " -out certs/keystore.p12 -passout pass:go-brrrr"
+                          " -keypbe AES-256-CBC -certpbe AES-256-CBC -macalg sha256")))}
 
   run
   {:doc     "Run the app under the JIT: bb run [port]"
@@ -74,6 +82,15 @@
   {:doc      "Chart every results file in bench-results/ into bench-results/report.html"
    :requires ([bench.report :as report])
    :task     (apply report/-main *command-line-args*)}
+
+  bench:jvm
+  {:doc      "The same load test against the JVM version (jvm/), labelled <os>-jvm-<sha>: bb bench:jvm [options]"
+   :depends  [keystore]
+   :requires ([bench.load :as load])
+   :task     (let [os  (if (str/includes? (System/getProperty "os.name") "Mac") "macos" "linux")
+                   sha (str/trim (:out (shell {:out :string} "git rev-parse --short HEAD")))]
+               (apply load/-main "--binary" "jvm/go-brrrr-jvm" "--label" (str os "-jvm-" sha)
+                      "--commit" sha *command-line-args*))}
 
   test
   {:doc     "All tests"

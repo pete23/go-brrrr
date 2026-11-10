@@ -153,9 +153,20 @@ For finding the ceiling rather than holding a rate, drop `--rps` and use h2load 
 e.g. `h2load -c 100 -m 10 -D 30 https://127.0.0.1:8443/` against `bb run` or
 `target/release/go-brrrr`.
 
+### The JVM version, for comparison
+
+`jvm/` is the same app on the JVM: `src/go_brrrr/main.jank`'s handler and middleware with
+upstream ring-core 1.15.6, served by Jetty 12 (ring-jetty9-adapter) over TLS, h1 and h2 on
+one port. `bb bench:jvm` takes the same options as `bb bench` and labels its results
+`<os>-jvm-<sha>`; pass `--warmup` to let the JIT settle first. It needs the Clojure CLI and
+a JDK (on macOS `jvm/go-brrrr-jvm` falls back to Homebrew's keg-only `openjdk`). Its
+`/_brrrr/stats` counts every thread's allocation, Jetty's included, whereas the jank figure
+leaves out h2o, which uses malloc rather than the GC.
+
 ## Layout
 
 - `src/go_brrrr/main.jank` – the app: a plain Ring handler plus middleware.
+- `jvm/` – the same app in Clojure on the JVM (Jetty), for comparison.
 - `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
   both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
   header map and method/scheme keywords itself.
