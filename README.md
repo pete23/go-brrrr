@@ -190,6 +190,15 @@ malformed escapes, form vs query precedence). `bb build:chez` builds it under `t
 collector's cumulative allocation. Needs Chez Scheme (`apt install chezscheme`,
 `brew install chezscheme`).
 
+Linux, h2, Intel Xeon @ 2.10GHz, 4 vCPU (KVM + Docker), h2load on the same host, all at
+`5e7634b`:
+
+| | 5,000 req/s, 5 min: p50 / p99 / p99.9 / max ms | uncapped, 50 × 1 | uncapped, 50 × 10 | alloc/req |
+|---|---|---|---|---|
+| jank (`src/`) | 0.64 / 2.15 / 7.49 / 54 | 48k req/s | 65k req/s | 9.8KB |
+| C++ reference | 0.34 / 0.86 / 2.96 / 25 | 85k req/s | 374k req/s | – |
+| Chez Scheme | 0.21 / 0.80 / 2.50 / 13 | 80k req/s | 346k req/s | 1.8KB |
+
 ### The JVM version, for comparison
 
 `jvm/` is the same app on the JVM: `src/go_brrrr/main.jank`'s handler and middleware with

@@ -49,7 +49,8 @@ section { display: flex; flex-direction: column; gap: 14px; }
 .swatch.hatched { height: 10px; transform: translateY(1px); }
 .legend-name { font-family: var(--font-data); font-weight: 500; color: var(--ink); }
 .legend-sys { color: var(--ink-3); }
-.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 16px; }
+.panels.wide { grid-template-columns: 1fr; }
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 12px 6px;
   display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
 svg { width: 100%; height: auto; display: block; overflow: visible; }
@@ -95,11 +96,15 @@ td.reported { color: var(--ink-3); font-style: italic; }
   const fig = document.getElementById('figures');
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-  // A series is one machine + one commit; its key is the label without the path suffix.
-  const seriesKey = (label) => label.replace(/-(root|add)$/, '');
+  // A series is one server build on one machine; its key is the label without the suffixes
+  // that only say which path, mode, protocol or stream count a file covers.
+  const seriesKey = (label) => { let k = label, prev;
+    do { prev = k; k = k.replace(/-(root|add|h3|extended|m\d+)$/, ''); } while (k !== prev); return k; };
   const keys = [];
   data.forEach((d) => { const k = seriesKey(d.label); if (!keys.includes(k)) keys.push(k); });
-  const colorOf = (label) => SERIES_VARS[keys.indexOf(seriesKey(label)) % SERIES_VARS.length];
+  // Colours are assigned per section (each compares at most 3 series), in legend order.
+  let sectionKeys = [];
+  const colorOf = (label) => SERIES_VARS[Math.max(0, sectionKeys.indexOf(seriesKey(label))) % SERIES_VARS.length];
   const sysOf = {};
   const commitOf = {};
   data.forEach((d) => { sysOf[seriesKey(d.label)] = d.system;
@@ -119,6 +124,7 @@ td.reported { color: var(--ink-3); font-style: italic; }
   const fmtRps = (v) => v == null ? '–' : v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0);
 
   function section(title, method, keysShown, hatchedKeys) {
+    sectionKeys = keysShown;
     const s = el('section', {}, fig);
     el('h2', {}, s, title);
     if (method) el('div', { class: 'method' }, s, method);
@@ -126,7 +132,7 @@ td.reported { color: var(--ink-3); font-style: italic; }
     keysShown.forEach((k) => {
       const it = el('div', { class: 'legend-item' }, lg);
       const sw = el('span', { class: 'swatch' + (hatchedKeys && hatchedKeys.includes(k) ? ' hatched' : '') }, it);
-      const c = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
+      const c = `var(${SERIES_VARS[keysShown.indexOf(k) % 3]})`;
       sw.style.background = hatchedKeys && hatchedKeys.includes(k)
         ? `repeating-linear-gradient(45deg, ${c} 0 2px, transparent 2px 5px)` : c;
       if (hatchedKeys && hatchedKeys.includes(k)) sw.style.border = `1px solid ${c}`;
@@ -198,7 +204,7 @@ td.reported { color: var(--ink-3); font-style: italic; }
       el('line', { x1: L, x2: W - R, y1: y(d), y2: y(d), stroke: css('--grid') }, svg);
       el('text', { x: L - 6, y: y(d) + 3, 'text-anchor': 'end' }, svg, fmtMs(d) + 'ms');
     }
-    const step = tmax > 40 ? 10 : 5;
+    const step = [1, 2, 5, 10, 15, 30, 60, 120].find((v) => tmax / v <= 7) || 300;
     for (let t = 0; t <= tmax; t += step) el('text', { x: x(t), y: H - B + 14, 'text-anchor': 'middle' }, svg, t + 's');
     el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, 'time into run · solid p99, dashed max');
     const tip = tooltip(panel);
@@ -239,17 +245,17 @@ td.reported { color: var(--ink-3); font-style: italic; }
       el('text', { x: 0, y: T + row * rowH + 14, 'font-weight': 500, style: 'fill: var(--ink-2)' }, svg, g.name);
       row++;
       g.bars.forEach((b) => {
-        const c = css(colorOf(b.label)); const yb = T + row * rowH + 3;
+        const c = css('--s1'); const yb = T + row * rowH + 3;
         let fill = c;
         if (b.reported) {
-          const id = 'hatch-' + keys.indexOf(seriesKey(b.label));
+          const id = 'hatch-reported';
           if (!defs.querySelector('#' + id)) {
             const pat = el('pattern', { id, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
             el('rect', { width: 2.5, height: 6, fill: c }, pat);
           }
           fill = `url(#${id})`;
         }
-        el('text', { x: L - 6, y: yb + 11, 'text-anchor': 'end' }, svg, seriesKey(b.label).replace(/-[0-9a-f]{7}$/, ''));
+        el('text', { x: L - 6, y: yb + 11, 'text-anchor': 'end' }, svg, b.name || seriesKey(b.label));
         const rect = el('rect', { x: L, y: yb, width: Math.max(1, x(b.rps) - L), height: 14, rx: 2, fill,
           stroke: b.reported ? c : 'none', 'stroke-width': b.reported ? 1 : 0 }, svg);
         el('text', { x: x(b.rps) + 4, y: yb + 11, style: 'fill: var(--ink-2)' }, svg, fmtRps(b.rps) + (b.reported ? '*' : ''));
@@ -263,46 +269,73 @@ td.reported { color: var(--ink-3); font-style: italic; }
   }
 
   // ---- assemble ----
-  const pick = (mode, path) => measured.filter((d) => d.run.mode === mode && d.run.path === path);
   const protos = ['h1', 'h2', 'h3'];
   const resFor = (d, p) => (d.results || []).find((r) => r.protocol === p);
-  const asRun = (d, p) => { const r = resFor(d, p); return r && r.latency ? { label: d.label, pcts: r.latency.percentiles, series: r.latency['per-second'] } : null; };
+  const machine = (d) => sysLine(d.system);
+  const streamsOf = (d) => d.run.streams || 1;
+  const groupBy = (xs, f) => { const m = new Map(); xs.forEach((x) => { const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; };
+  // The newest `max` series in a group, oldest first.
+  const newestKeys = (files, max) => {
+    const latest = new Map();
+    files.forEach((d) => { const k = seriesKey(d.label); const t = String(d.run.timestamp);
+      if (!latest.has(k) || latest.get(k) < t) latest.set(k, t); });
+    return [...latest.entries()].sort((x, y) => (x[1] < y[1] ? 1 : -1)).slice(0, max).map(([k]) => k).reverse();
+  };
+  // One run per series and protocol: the newest file of that series with that protocol.
+  const runsFor = (files, ks, p) => ks.map((k) => {
+    const f = files.filter((d) => seriesKey(d.label) === k && resFor(d, p) && resFor(d, p).latency)
+                   .sort((x, y) => (String(x.run.timestamp) < String(y.run.timestamp) ? 1 : -1))[0];
+    return f && { label: f.label, pcts: resFor(f, p).latency.percentiles, series: resFor(f, p).latency['per-second'] };
+  }).filter(Boolean);
+  const dropped = (files, ks) => [...new Set(files.map((d) => seriesKey(d.label)))].filter((k) => !ks.includes(k));
 
-  const fixed = pick('100rps', '/');
-  if (fixed.length) {
-    const ks = [...new Set(fixed.map((d) => seriesKey(d.label)))];
-    const d0 = fixed[0].run;
-    const p1 = section('At a steady 100 req/s', `GET / · ${d0['duration-s']}s per protocol · ${d0.clients} clients × ${d0.rate / d0.clients} req/s · ${d0['load-generator']}`, ks);
-    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+  // Fixed rate: one section per rate, path and machine.
+  const fixedGroups = groupBy(measured.filter((d) => d.run.mode !== 'uncapped'),
+                              (d) => `${d.run.rate}|${d.run.path}|${machine(d)}`);
+  [...fixedGroups.values()].sort((x, y) => x[0].run.rate - y[0].run.rate).forEach((files) => {
+    const ks = newestKeys(files, 3); const r0 = files[0].run; const extra = dropped(files, ks);
+    const method = `GET ${r0.path} · ${r0['duration-s']}s per protocol · ${r0.clients} clients × ${r0.rate / r0.clients} req/s · ${r0['load-generator']}`
+      + (extra.length ? ` · older runs in the table: ${extra.join(', ')}` : '');
+    const p1 = section(`At a steady ${r0.rate.toLocaleString()} req/s on ${files[0].system['cpu-model']}`, method, ks);
+    protos.forEach((p) => { const rs = runsFor(files, ks, p);
       if (rs.length) percentileChart(el('div', { class: 'panel' }, p1), `${p} · latency by percentile`, rs); });
-    const p2 = section('Tail latency over the run', `Same runs: each second's p99 and slowest request`, ks);
-    protos.forEach((p) => { const rs = fixed.map((d) => asRun(d, p)).filter(Boolean);
+    const p2 = section(`Tail latency over the run`, `Same runs: each second's p99 and slowest request`, ks);
+    protos.forEach((p) => { const rs = runsFor(files, ks, p);
       if (rs.length) timeChart(el('div', { class: 'panel' }, p2), `${p} · per-second p99 and max`, rs); });
+  });
+
+  // Ceiling: throughput, one panel per machine; one hue, every bar labelled.
+  const unc = measured.filter((d) => d.run.mode === 'uncapped');
+  const machines = [...new Set([...unc, ...reported].map(machine))];
+  if (machines.length) {
+    const p3 = section('Ceiling: uncapped throughput', 'Each client keeps the given number of requests in flight for the whole run', []);
+    p3.classList.add('wide');
+    machines.forEach((m) => {
+      const groups = [];
+      const files = unc.filter((d) => machine(d) === m);
+      const keyOf = (d) => `${d.run.path}|${streamsOf(d)}`;
+      [...groupBy(files, keyOf).values()].forEach((fs) => protos.forEach((p) => {
+        const bars = [];
+        newestKeys(fs, 5).forEach((k) => { const f = fs.find((d) => seriesKey(d.label) === k && resFor(d, p));
+          if (f && resFor(f, p).rps) bars.push({ label: f.label, name: k, rps: resFor(f, p).rps }); });
+        if (bars.length) groups.push({ name: `${p} ${fs[0].run.path} · ${fs[0].run.clients} clients × ${streamsOf(fs[0])} in flight`, bars });
+      }));
+      reported.filter((d) => machine(d) === m).forEach((d) => d.runs.filter((r) => r.mode === 'uncapped').forEach((r) =>
+        r.protocols.forEach((p) => groups.push({ name: `${p} ${r.path} · ${r.clients || 50} clients`,
+                                               bars: [{ label: d.label, name: seriesKey(d.label), rps: r.rps, reported: true }] }))));
+      if (groups.length) throughputChart(el('div', { class: 'panel' }, p3), m, groups);
+    });
   }
 
-  const paths = [...new Set(data.flatMap((d) => d.reported ? d.runs.filter((r) => r.mode === 'uncapped').map((r) => r.path) : (d.run.mode === 'uncapped' ? [d.run.path] : [])))];
-  if (paths.length) {
-    const unc = measured.filter((d) => d.run.mode === 'uncapped');
-    const ks = [...new Set([...unc, ...reported].map((d) => seriesKey(d.label)))];
-    const d0 = unc[0] ? unc[0].run : {};
-    const p3 = section('Ceiling: uncapped throughput', `${d0.clients || 50} clients, ${d0.streams || 1} request in flight each · ${d0['duration-s'] || '?'}s per protocol and path`,
-      ks, reported.map((d) => seriesKey(d.label)));
-    const groups = [];
-    paths.forEach((path) => ['h1', 'h2'].forEach((p) => {
-      const bars = [];
-      unc.filter((d) => d.run.path === path).forEach((d) => { const r = resFor(d, p); if (r && r.rps) bars.push({ label: d.label, rps: r.rps }); });
-      reported.forEach((d) => d.runs.filter((r) => r.mode === 'uncapped' && r.path === path && r.protocols.includes(p))
-        .forEach((r) => bars.push({ label: d.label, rps: r.rps, reported: true })));
-      if (bars.length) groups.push({ name: `${p} ${path}`, bars });
-    }));
-    throughputChart(el('div', { class: 'panel' }, p3), 'requests per second', groups);
-    const unr = unc.filter((d) => d.run.path === '/');
-    if (unr.length) {
-      const p4 = section('Latency at the ceiling', 'GET /, uncapped runs above (measured runs only)', [...new Set(unr.map((d) => seriesKey(d.label)))]);
-      protos.forEach((p) => { const rs = unr.map((d) => asRun(d, p)).filter(Boolean);
-        if (rs.length) percentileChart(el('div', { class: 'panel' }, p4), `${p} · latency by percentile`, rs); });
-    }
-  }
+  // Ceiling: latency, one section per machine, path and streams.
+  [...groupBy(unc, (d) => `${machine(d)}|${d.run.path}|${streamsOf(d)}`).values()].forEach((files) => {
+    const ks = newestKeys(files, 3); const r0 = files[0].run; const extra = dropped(files, ks);
+    const p4 = section(`Latency at the ceiling on ${files[0].system['cpu-model']}`,
+      `GET ${r0.path} uncapped · ${r0.clients} clients × ${streamsOf(files[0])} in flight · ${r0['duration-s']}s`
+      + (extra.length ? ` · older runs in the table: ${extra.join(', ')}` : ''), ks);
+    protos.forEach((p) => { const rs = runsFor(files, ks, p);
+      if (rs.length) percentileChart(el('div', { class: 'panel' }, p4), `${p} · latency by percentile`, rs); });
+  });
 
   // ---- numbers table ----
   const ts = el('section', {}, fig);
@@ -335,7 +368,6 @@ td.reported { color: var(--ink-3); font-style: italic; }
     const s = sysOf[k] || {}; const isRep = reported.some((d) => seriesKey(d.label) === k);
     const c = el('div', { class: 'card' }, cards);
     const h = el('div', { class: 'legend-item' }, c);
-    const sw = el('span', { class: 'swatch' }, h); sw.style.background = `var(${SERIES_VARS[keys.indexOf(k) % 3]})`;
     el('span', { class: 'legend-name' }, h, k);
     if (isRep) el('span', { class: 'badge' }, c, 'reported, not measured here');
     const dl = el('dl', {}, c);
