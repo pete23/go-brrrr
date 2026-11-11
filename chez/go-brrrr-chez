@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Starts the Chez Scheme version on the given port (default 8443); bb bench:chez runs it.
+# Needs bb build:chez first. Runs from the repository root (certs/ and target/ are relative).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+scheme=$(command -v scheme || command -v chez || true)   # Homebrew names it chez
+if [ -z "$scheme" ]; then echo "go-brrrr-chez: Chez Scheme not found (scheme or chez)" >&2; exit 1; fi
+exec "$scheme" --program target/chez/go-brrrr.so "$@"

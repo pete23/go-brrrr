@@ -113,6 +113,44 @@
                (apply load/-main "--binary" "target/reference/h2o-ref" "--label" (str os "-h2o-ref-" sha)
                       "--commit" sha "--protocols" "h2" *command-line-args*))}
 
+  build:chez
+  {:doc     "The Chez Scheme version (chez/): its libh2o glue and compiled program under target/chez"
+   :depends [build]
+   :task    (let [lib (first (fs/glob "target/release/_cache" "go-brrrr-out-*/lib"))
+                  mac (str/includes? (System/getProperty "os.name") "Mac")
+                  so  (str "target/chez/libbrrrr-chez." (if mac "dylib" "so"))
+                  ssl (or (System/getenv "OPENSSL_ROOT_DIR")
+                          (some (fn [p] (when (fs/exists? (fs/path p "include" "openssl" "ssl.h")) (str p)))
+                                ["/opt/homebrew/opt/openssl@3" "/usr/local/opt/openssl@3"]))
+                  scheme (or (fs/which "scheme") (fs/which "chez")
+                             (throw (ex-info "Chez Scheme not found: apt install chezscheme / brew install chezscheme" {})))]
+              (fs/create-dirs "target/chez")
+              (if (and (fs/exists? so) (empty? (fs/modified-since so ["chez/brrrr_chez.c" (str lib)])))
+                (println so "is up to date")
+                (apply shell "clang" "-O2" "-fPIC" "-std=c11" "-Wall" "-Wextra" "-Wno-unused-parameter"
+                       "-Wno-missing-field-initializers" "-D_GNU_SOURCE" "-DH2O_USE_LIBUV=0" "-DQUICLY_USE_TRACER=1"
+                       "-Ivendor/h2o/include" "-Ivendor/h2o/deps/picotls/include" "-Ivendor/h2o/deps/quicly/include"
+                       (concat (when ssl [(str "-I" ssl "/include")])
+                               (if mac ["-dynamiclib"] ["-shared"])
+                               ["chez/brrrr_chez.c" "-o" so (str (fs/path lib "libh2o-evloop.a"))]
+                               (when ssl [(str "-L" ssl "/lib")])
+                               ["-lssl" "-lcrypto" "-lz" "-lm" "-pthread"])))
+              (let [prog "target/chez/go-brrrr.so"]
+                (if (and (fs/exists? prog) (empty? (fs/modified-since prog ["chez/go-brrrr.ss"])))
+                  (println prog "is up to date")
+                  (shell {:in (str "(parameterize ([optimize-level 3] [debug-level 0])"
+                                   " (compile-program \"chez/go-brrrr.ss\" \"" prog "\"))")}
+                         (str scheme) "-q"))))}
+
+  bench:chez
+  {:doc      "The same load test against the Chez Scheme version, labelled <os>-chez-<sha>: bb bench:chez [options]"
+   :depends  [build:chez cert]
+   :requires ([bench.load :as load])
+   :task     (let [os  (if (str/includes? (System/getProperty "os.name") "Mac") "macos" "linux")
+                   sha (str/trim (:out (shell {:out :string} "git rev-parse --short HEAD")))]
+               (apply load/-main "--binary" "chez/go-brrrr-chez" "--label" (str os "-chez-" sha)
+                      "--commit" sha *command-line-args*))}
+
   bench:jvm
   {:doc      "The same load test against the JVM version (jvm/), labelled <os>-jvm-<sha>: bb bench:jvm [options]"
    :depends  [keystore]

@@ -122,6 +122,7 @@ namespace
     req->res.reason = reason;
     if(text_plain)
     { h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, nullptr, H2O_STRLIT("text/plain")); }
+    req->res.content_length = body.size(); // h2o_send_inline doesn't set it; without, h1 goes chunked
     h2o_send_inline(req, body.data(), body.size());
   }
 

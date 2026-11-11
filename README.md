@@ -11,7 +11,7 @@ A [jank](https://jank-lang.org) Ring app served over HTTP/1.1, HTTP/2 and HTTP/3
 ### macOS (Apple silicon)
 
 ```bash
-brew install jank-lang/jank/jank leiningen borkdude/brew/babashka cmake ninja openssl@3 nghttp2
+brew install jank-lang/jank/jank leiningen borkdude/brew/babashka cmake ninja openssl@3 nghttp2 chezscheme
 xcode-select --install   # if you don't have the command line tools
 ```
 
@@ -26,7 +26,7 @@ curl -s https://ppa.jank-lang.org/KEY.gpg | gpg --dearmor | sudo tee /etc/apt/tr
 echo "deb [signed-by=/etc/apt/trusted.gpg.d/jank.gpg] https://ppa.jank-lang.org $(lsb_release -cs) main" \
   | sudo tee /etc/apt/sources.list.d/jank.list >/dev/null
 sudo apt update && sudo apt install -y jank leiningen bubblewrap clang cmake ninja-build \
-  libssl-dev zlib1g-dev curl nghttp2-client
+  libssl-dev zlib1g-dev curl nghttp2-client chezscheme
 bash <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)
 ```
 
@@ -176,6 +176,20 @@ including its errors (a repeated parameter, or a sum that overflows, is a 500, a
 `target/reference/h2o-ref` against the same libh2o; `bb bench:ref` benchmarks it (h2 only
 by default; labelled `<os>-h2o-ref-<sha>`). It has no GC, so allocation shows as `?`.
 
+### The Chez Scheme version, for comparison
+
+`chez/` is the same API in [Chez Scheme](https://cisco.github.io/ChezScheme/). Chez has no
+sockets, TLS or HTTP/2 of its own, and the Scheme web servers that exist are HTTP/1-only
+(Racket's web-server, which runs on Chez, among them), so it uses libh2o, like the reference:
+`chez/brrrr_chez.c` runs one h2o event loop (h1 and h2 over TLS) and calls a Scheme procedure,
+through Chez's FFI, inline for each request; routing, parameter parsing and the `parse-long` /
+overflow rules are in `chez/go-brrrr.ss`, compiled at `optimize-level 3`. It answers 41
+edge-case requests identically to the reference (repeated keys, overflow, out-of-range values,
+malformed escapes, form vs query precedence). `bb build:chez` builds it under `target/chez`;
+`bb bench:chez` benchmarks it (labelled `<os>-chez-<sha>`). Its stats endpoint reports the Chez
+collector's cumulative allocation. Needs Chez Scheme (`apt install chezscheme`,
+`brew install chezscheme`).
+
 ### The JVM version, for comparison
 
 `jvm/` is the same app on the JVM: `src/go_brrrr/main.jank`'s handler and middleware with
@@ -191,6 +205,7 @@ leaves out h2o, which uses malloc rather than the GC.
 - `src/go_brrrr/main.jank` – the app: a plain Ring handler plus middleware.
 - `jvm/` – the same app in Clojure on the JVM (Jetty), for comparison.
 - `reference/` – the same API in C++ directly on libh2o, the benchmark ceiling.
+- `chez/` – the same API in Chez Scheme on libh2o, through Chez's FFI.
 - `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
   both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
   header map and method/scheme keywords itself.
