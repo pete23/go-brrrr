@@ -1,0 +1,164 @@
+{
+ "engine": "pgrust-columnar",
+ "scale": "s100m",
+ "rows": 100000000,
+ "label": "linux-4c",
+ "started": "2026-11-18T20:06:44",
+ "machine": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_gib": 15.7,
+  "kernel": "6.18.44-fc-v595",
+  "container_memory_limit": "12g"
+ },
+ "cold_runs": true,
+ "page_cache_dropped": true,
+ "queries": {
+  "q01_full_scan": {
+   "cold_s": 0.5764877120000165,
+   "hot_s": [
+    0.24462568600029044,
+    0.20683689299994512,
+    0.23345809099964754
+   ],
+   "rows": 1,
+   "correct": true
+  },
+  "q02_service_l1": {
+   "cold_s": 1.2405978050001067,
+   "hot_s": [
+    0.7584925910000493,
+    0.7482389379997585,
+    0.9222666780001418
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q03_supplier_l1_x_service_l1": {
+   "cold_s": 1.670531032999861,
+   "hot_s": [
+    1.3677597349997086,
+    1.228579080000145,
+    1.3411360529999001
+   ],
+   "rows": 80,
+   "correct": true
+  },
+  "q04_top_products_governor": {
+   "cold_s": 11.564591448000101,
+   "hot_s": [
+    10.940218798000387,
+    10.893667628000003,
+    10.606369592000192
+   ],
+   "rows": 20,
+   "correct": true
+  },
+  "q05_supplier_subtree_filter": {
+   "cold_s": 0.6181578599998829,
+   "hot_s": [
+    0.283735113000148,
+    0.24366716099984842,
+    0.23882323700036068
+   ],
+   "rows": 100,
+   "correct": true
+  },
+  "q06_recursive_governor_subtree": {
+   "cold_s": 2.689691516000039,
+   "hot_s": [
+    1.7240703560000838,
+    1.6560927380000976,
+    1.7944548860000396
+   ],
+   "rows": 50,
+   "correct": true
+  },
+  "q07_distinct_per_service_l1": {
+   "cold_s": 4.612169085999994,
+   "hot_s": [
+    3.2422591999998076,
+    2.801283382999827,
+    2.7857383979999213
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q08_top_suppliers": {
+   "cold_s": 2.646078335999846,
+   "hot_s": [
+    2.1531557500002236,
+    0.8809254009997858,
+    2.554093383000236
+   ],
+   "rows": 100,
+   "correct": true
+  },
+  "q09_product_supplier_pairs": {
+   "cold_s": 32.38580670099964,
+   "hot_s": [
+    31.640553154999907,
+    31.367278631999852,
+    30.797711049999634
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q10_cross_charging": {
+   "cold_s": 2.3899191129999053,
+   "hot_s": [
+    2.005034743000124,
+    2.0189737929999865,
+    1.8767153959997813
+   ],
+   "rows": 56,
+   "correct": true
+  },
+  "q11_unit_price_by_service_l2": {
+   "cold_s": 0.8623670329998276,
+   "hot_s": [
+    0.5250950459999331,
+    0.5732134909999331,
+    0.6066185199997562
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q12_one_product": {
+   "cold_s": 0.5044737899997926,
+   "hot_s": [
+    0.030004769999777636,
+    0.027484409999942727,
+    0.02814821399988432
+   ],
+   "rows": 80,
+   "correct": true
+  },
+  "q13_rank_services_within_l1": {
+   "cold_s": 3.4450536580002336,
+   "hot_s": [
+    2.805245578999802,
+    2.5865253670003767,
+    2.468518892999782
+   ],
+   "rows": 30,
+   "correct": true
+  }
+ },
+ "version": "PostgreSQL 18.6 (pgrust 0.4-beta, build 20911cc) on x86_64-unknown-linux-gnu, 64-bit",
+ "load_steps": {
+  "copy_org": 0.16363263130187988,
+  "copy_service": 0.02974390983581543,
+  "copy_product": 0.7213401794433594,
+  "copy_fact": 28.780597925186157,
+  "vacuum_analyze_checkpoint": 0.9447944164276123
+ },
+ "load_s": 30.656262159347534,
+ "sizes": {
+  "org": 10493952,
+  "service": 1269760,
+  "product": 45907968,
+  "fact": 1194467148
+ },
+ "finished": "2026-11-18T20:12:00"
+}
