@@ -1,0 +1,196 @@
+{
+  "db": "arcadedb",
+  "version": "26.11.1",
+  "mode": "durable",
+  "host": {
+    "cpus": 4,
+    "os": "linux"
+  },
+  "config": {
+    "batch": 1000,
+    "c": 16,
+    "dim": 128,
+    "docs": 100000,
+    "follows": 10,
+    "heavy_c": 4,
+    "load_workers": 4,
+    "persons": 100000,
+    "seconds": 10,
+    "surreal_ef": 100
+  },
+  "load": {
+    "docs": {
+      "rows": 100000,
+      "seconds": 3.204912496,
+      "rows_per_s": 31202.099940266202,
+      "conflict_retries": 0
+    },
+    "edges": {
+      "rows": 1000000,
+      "seconds": 39.376770703,
+      "rows_per_s": 25395.683346979313,
+      "conflict_retries": 610
+    },
+    "persons": {
+      "rows": 100000,
+      "seconds": 2.335404035,
+      "rows_per_s": 42819.14328370166,
+      "conflict_retries": 0
+    }
+  },
+  "verify": {
+    "checks": 213,
+    "vector_recall_at_10": 0.985,
+    "first_knn_ms": 29253.217
+  },
+  "runs": [
+    {
+      "op": "noop",
+      "concurrency": 16,
+      "ops": 127813,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 12779.583330072897,
+      "p50_ms": 0.843,
+      "p90_ms": 2.586,
+      "p99_ms": 6.858,
+      "max_ms": 74.71
+    },
+    {
+      "op": "point_read",
+      "concurrency": 16,
+      "ops": 134335,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 13430.348398182941,
+      "p50_ms": 0.888,
+      "p90_ms": 2.182,
+      "p99_ms": 6.205,
+      "max_ms": 33.502
+    },
+    {
+      "op": "point_update",
+      "concurrency": 16,
+      "ops": 33040,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 3302.136802330653,
+      "p50_ms": 4.006,
+      "p90_ms": 8.235,
+      "p99_ms": 13.557,
+      "max_ms": 38.352
+    },
+    {
+      "op": "insert_one",
+      "concurrency": 16,
+      "ops": 20832,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 2082.3296717809453,
+      "p50_ms": 6.674,
+      "p90_ms": 10.155,
+      "p99_ms": 37.087,
+      "max_ms": 108.173
+    },
+    {
+      "op": "index_lookup",
+      "concurrency": 16,
+      "ops": 70175,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 7015.109409254799,
+      "p50_ms": 1.914,
+      "p90_ms": 3.949,
+      "p99_ms": 8.575,
+      "max_ms": 37.012
+    },
+    {
+      "op": "agg_group",
+      "concurrency": 4,
+      "ops": 703,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 70.07324946752065,
+      "p50_ms": 55.284,
+      "p90_ms": 73.015,
+      "p99_ms": 113.582,
+      "max_ms": 143.752
+    },
+    {
+      "op": "graph_1hop",
+      "concurrency": 16,
+      "ops": 111807,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 11176.857246708694,
+      "p50_ms": 1.161,
+      "p90_ms": 2.554,
+      "p99_ms": 6.136,
+      "max_ms": 21.123
+    },
+    {
+      "op": "graph_2hop",
+      "concurrency": 16,
+      "ops": 80765,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 8072.117323812997,
+      "p50_ms": 1.633,
+      "p90_ms": 3.535,
+      "p99_ms": 7.377,
+      "max_ms": 22.365
+    },
+    {
+      "op": "graph_3hop",
+      "concurrency": 4,
+      "ops": 20362,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 2035.518837436622,
+      "p50_ms": 1.478,
+      "p90_ms": 3.718,
+      "p99_ms": 7.253,
+      "max_ms": 26.567
+    },
+    {
+      "op": "graph_2hop_cypher",
+      "concurrency": 16,
+      "ops": 57512,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 5750.128894165226,
+      "p50_ms": 2.184,
+      "p90_ms": 5.501,
+      "p99_ms": 11.407,
+      "max_ms": 28.393
+    },
+    {
+      "op": "graph_3hop_cypher",
+      "concurrency": 4,
+      "ops": 12049,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 1204.335507353566,
+      "p50_ms": 2.731,
+      "p90_ms": 6.028,
+      "p99_ms": 9.361,
+      "max_ms": 18.699
+    },
+    {
+      "op": "vector_knn",
+      "concurrency": 4,
+      "ops": 15148,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 1514.3710643908603,
+      "p50_ms": 2.04,
+      "p90_ms": 4.894,
+      "p99_ms": 8.147,
+      "max_ms": 16.472
+    }
+  ],
+  "server": {
+    "peak_rss_mb": 3644,
+    "disk_mb": 206
+  }
+}
