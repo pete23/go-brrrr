@@ -215,7 +215,7 @@ leaves out h2o, which uses malloc rather than the GC.
 - `jvm/` – the same app in Clojure on the JVM (Jetty), for comparison.
 - `reference/` – the same API in C++ directly on libh2o, the benchmark ceiling.
 - `chez/` – the same API in Chez Scheme on libh2o, through Chez's FFI.
-- `db-bench/` – unrelated side quest: ArcadeDB vs SurrealDB, same data and client (Go). See its README.
+- `db-bench/` – unrelated side quest: ArcadeDB vs SurrealDB vs FalkorDB, same data and client (Go). See its README.
 - `src/ring/adapter/h2o.jank` – `run-h2o`. Builds Ring request maps and streams bodies
   both ways; a small `cpp/raw` bridge marshals between them and the C shim, building the
   header map and method/scheme keywords itself.

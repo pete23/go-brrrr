@@ -24,5 +24,18 @@ if [ ! -x surreal ]; then
   done
   cp surreal-root/surreal . && rm -rf surreal-root
 fi
+# FalkorDB: Docker Hub rate-limits anonymous pulls, so take redis-server and the module
+# from the falkordblite wheel on PyPI instead.
+if [ ! -x falkordb/falkordb.so ]; then
+  url=$(curl -sS https://pypi.org/pypi/falkordblite/json | python3 -c 'import sys,json;print([u["url"] for u in json.load(sys.stdin)["urls"] if u["filename"].endswith("cp312-cp312-manylinux_2_38_x86_64.whl")][0])')
+  rm -rf falkordb-whl && mkdir -p falkordb-whl falkordb
+  curl -sSfL -o falkordb-whl/f.whl "$url"
+  python3 -m zipfile -e falkordb-whl/f.whl falkordb-whl/x
+  cp falkordb-whl/x/redislite/bin/* falkordb-whl/x/falkordblite.libs/* falkordb/
+  chmod +x falkordb/redis-server falkordb/redis-cli falkordb/falkordb.so
+  rm -rf falkordb-whl
+fi
+
 ./surreal version
 ls -d arcadedb-*
+falkordb/redis-server --version

@@ -1,0 +1,172 @@
+{
+  "db": "falkordb",
+  "version": "4.22.1",
+  "mode": "durable",
+  "host": {
+    "cpus": 4,
+    "os": "linux"
+  },
+  "config": {
+    "batch": 1000,
+    "c": 16,
+    "dim": 128,
+    "docs": 100000,
+    "follows": 10,
+    "heavy_c": 4,
+    "load_workers": 4,
+    "persons": 100000,
+    "seconds": 10,
+    "surreal_ef": 100
+  },
+  "load": {
+    "docs": {
+      "rows": 100000,
+      "seconds": 40.199119689,
+      "rows_per_s": 2487.6166635898694,
+      "conflict_retries": 0
+    },
+    "edges": {
+      "rows": 1000000,
+      "seconds": 72.414766358,
+      "rows_per_s": 13809.33820950629,
+      "conflict_retries": 0
+    },
+    "persons": {
+      "rows": 100000,
+      "seconds": 1.413774445,
+      "rows_per_s": 70732.64080678725,
+      "conflict_retries": 0
+    }
+  },
+  "verify": {
+    "checks": 153,
+    "vector_recall_at_10": 0.984,
+    "first_knn_ms": 1.313
+  },
+  "runs": [
+    {
+      "op": "noop",
+      "concurrency": 16,
+      "ops": 384268,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 38413.719786530586,
+      "p50_ms": 0.348,
+      "p90_ms": 0.729,
+      "p99_ms": 1.42,
+      "max_ms": 7.519
+    },
+    {
+      "op": "point_read",
+      "concurrency": 16,
+      "ops": 226355,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 22630.704200740878,
+      "p50_ms": 0.617,
+      "p90_ms": 1.112,
+      "p99_ms": 2.136,
+      "max_ms": 6.911
+    },
+    {
+      "op": "point_update",
+      "concurrency": 16,
+      "ops": 18538,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 1852.3442583922558,
+      "p50_ms": 8.219,
+      "p90_ms": 11.602,
+      "p99_ms": 16.908,
+      "max_ms": 22.209
+    },
+    {
+      "op": "insert_one",
+      "concurrency": 16,
+      "ops": 21175,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 2115.981574373006,
+      "p50_ms": 7.293,
+      "p90_ms": 10.254,
+      "p99_ms": 15.625,
+      "max_ms": 37.27
+    },
+    {
+      "op": "index_lookup",
+      "concurrency": 16,
+      "ops": 53363,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 5335.340888176965,
+      "p50_ms": 2.851,
+      "p90_ms": 4.398,
+      "p99_ms": 6.454,
+      "max_ms": 21.058
+    },
+    {
+      "op": "agg_group",
+      "concurrency": 4,
+      "ops": 921,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 91.77162883299162,
+      "p50_ms": 40.961,
+      "p90_ms": 56.462,
+      "p99_ms": 66.414,
+      "max_ms": 75.762
+    },
+    {
+      "op": "graph_1hop",
+      "concurrency": 16,
+      "ops": 165219,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 16519.443548832623,
+      "p50_ms": 0.872,
+      "p90_ms": 1.447,
+      "p99_ms": 2.739,
+      "max_ms": 28.629
+    },
+    {
+      "op": "graph_2hop",
+      "concurrency": 16,
+      "ops": 120446,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 12042.48549007901,
+      "p50_ms": 1.251,
+      "p90_ms": 1.956,
+      "p99_ms": 2.944,
+      "max_ms": 18.017
+    },
+    {
+      "op": "graph_3hop",
+      "concurrency": 4,
+      "ops": 28052,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 2804.8919762997953,
+      "p50_ms": 1.283,
+      "p90_ms": 2.166,
+      "p99_ms": 3.504,
+      "max_ms": 12.297
+    },
+    {
+      "op": "vector_knn",
+      "concurrency": 4,
+      "ops": 54402,
+      "errors": 0,
+      "conflicts": 0,
+      "ops_per_s": 5439.724547403604,
+      "p50_ms": 0.656,
+      "p90_ms": 1.111,
+      "p99_ms": 1.855,
+      "max_ms": 47.738
+    }
+  ],
+  "server": {
+    "peak_rss_mb": 354,
+    "disk_mb": 78
+  }
+}

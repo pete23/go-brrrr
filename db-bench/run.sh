@@ -6,6 +6,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 DBS=${DBS:-$here/.dbs}
 ARCADE_HOME=${ARCADE_HOME:-$(ls -d "$DBS"/arcadedb-* | tail -1)}
 SURREAL=${SURREAL:-$DBS/surreal}
+FALKOR=${FALKOR:-$DBS/falkordb}
 DATA=${DATA:-$DBS/data}
 OUT=${OUT:-$here/results}
 HEAP=${HEAP:-4G}
@@ -28,13 +29,19 @@ stats() { # pid, data dir -> "peak_rss_mb disk_mb"
   echo "$hwm $(du -sm "$2" | cut -f1)"
 }
 
+stop_all() {
+  pkill -f com.arcadedb.server.ArcadeDBServer || true; pkill -x surreal || true
+  pkill -f "redis-server .*:6380" || true; sleep 1
+}
+
 for mode in "${modes[@]}"; do
   # durable: fsync the log on every commit (SurrealDB's default; ArcadeDB txWalFlush=2)
   # relaxed: leave flushing to the OS (ArcadeDB's default; SurrealDB ?sync=never)
-  if [ "$mode" = durable ]; then wal=2; ssync=every; else wal=0; ssync=never; fi
+  # FalkorDB is in-memory; durability is Redis's AOF: appendfsync always | no
+  if [ "$mode" = durable ]; then wal=2; ssync=every; afs=always; else wal=0; ssync=never; afs=no; fi
 
-  for db in ${DB_LIST:-arcadedb surrealdb surrealdb-ws}; do
-    pkill -f com.arcadedb.server.ArcadeDBServer || true; pkill -x surreal || true; sleep 1
+  for db in ${DB_LIST:-arcadedb surrealdb surrealdb-ws falkordb}; do
+    stop_all
     rm -rf "$DATA"; mkdir -p "$DATA"
     if [ $db = arcadedb ]; then
       rm -rf "$ARCADE_HOME/databases/bench"
@@ -43,6 +50,13 @@ for mode in "${modes[@]}"; do
         -Darcadedb.server.databaseDirectory="$DATA" > "$DATA/../arcadedb.log" 2>&1 &)
       url=http://127.0.0.1:2480; wait_http $url/api/v1/ready; ver=$av
       pid=$(pgrep -f com.arcadedb.server.ArcadeDBServer)
+    elif [ $db = falkordb ]; then
+      (cd "$FALKOR" && nohup ./redis-server --bind 127.0.0.1 --port 6380 --dir "$DATA" --save "" \
+        --appendonly yes --appendfsync $afs --loadmodule "$FALKOR/falkordb.so" > "$DATA/../falkordb.log" 2>&1 &)
+      for _ in $(seq 60); do "$FALKOR/redis-cli" -p 6380 ping >/dev/null 2>&1 && break; sleep 0.5; done
+      url=127.0.0.1:6380
+      ver=$("$FALKOR/redis-cli" -p 6380 module list | awk 'p{v=$1; printf "%d.%d.%d", v/10000, (v/100)%100, v%100; exit} /^graph$/{g=1} g&&/^ver$/{p=1}')
+      pid=$(pgrep -f "redis-server .*:6380")
     else
       nohup "$SURREAL" start -u root -p root -b 127.0.0.1:8000 "surrealkv://$DATA/surreal?sync=$ssync" \
         > "$DATA/../surrealdb.log" 2>&1 &
@@ -59,4 +73,4 @@ import json,sys; p=sys.argv[1]; r=json.load(open(p)); r["server"]={"peak_rss_mb"
 PY
   done
 done
-pkill -f com.arcadedb.server.ArcadeDBServer || true; pkill -x surreal || true
+stop_all

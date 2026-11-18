@@ -793,7 +793,7 @@ type report struct {
 }
 
 func main() {
-	which := flag.String("db", "", "arcadedb | surrealdb | surrealdb-ws")
+	which := flag.String("db", "", "arcadedb | surrealdb | surrealdb-ws | falkordb")
 	url := flag.String("url", "", "server URL")
 	version := flag.String("version", "", "server version, for the report")
 	mode := flag.String("mode", "durable", "label: durable | relaxed")
@@ -807,7 +807,7 @@ func main() {
 	heavyConc := flag.Int("heavy-c", 4, "concurrency for agg/3hop/vector")
 	dur := flag.Duration("d", 10*time.Second, "duration per op")
 	ops := flag.String("ops", "noop,point_read,point_update,insert_one,index_lookup,agg_group,graph_1hop,graph_2hop,graph_3hop,graph_2hop_cypher,graph_3hop_cypher,vector_knn", "ops to run")
-	ef := flag.Int("ef", 100, "surreal HNSW search ef")
+	ef := flag.Int("ef", 100, "HNSW search ef (SurrealDB, FalkorDB efRuntime)")
 	out := flag.String("out", "", "write JSON report here")
 	flag.Parse()
 
@@ -817,8 +817,10 @@ func main() {
 		db = &Surreal{url: *url, ns: "bench", db: "bench", ef: *ef, ws: *which == "surrealdb-ws"}
 	case "arcadedb":
 		db = &Arcade{url: *url, db: "bench"}
+	case "falkordb":
+		db = &Falkor{addr: strings.TrimPrefix(*url, "redis://"), graph: "bench", ef: *ef}
 	default:
-		fmt.Fprintln(os.Stderr, "-db arcadedb|surrealdb")
+		fmt.Fprintln(os.Stderr, "-db arcadedb|surrealdb|surrealdb-ws|falkordb")
 		os.Exit(2)
 	}
 	t := time.Now()

@@ -5,7 +5,7 @@ d = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__)
 latest = {}
 for f in sorted(glob.glob(os.path.join(d, "*.json"))):
     r = json.load(open(f)); latest[(r["db"], r["mode"])] = r
-dbs = ["arcadedb", "surrealdb", "surrealdb-ws"]
+dbs = ["arcadedb", "surrealdb", "surrealdb-ws", "falkordb"]
 for mode in ["durable", "relaxed"]:
     cols = [db for db in dbs if (db, mode) in latest]
     if not cols: continue
