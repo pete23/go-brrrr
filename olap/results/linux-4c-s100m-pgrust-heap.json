@@ -3,7 +3,7 @@
  "scale": "s100m",
  "rows": 100000000,
  "label": "linux-4c",
- "started": "2026-11-18T20:17:24",
+ "started": "2026-11-18T20:19:16",
  "machine": {
   "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
   "cores": 4,
@@ -13,8 +13,152 @@
  },
  "cold_runs": true,
  "page_cache_dropped": true,
- "queries": {},
+ "queries": {
+  "q01_full_scan": {
+   "cold_s": 1.822807083999578,
+   "hot_s": [
+    1.108133523000106,
+    1.2531750590005686,
+    0.9633911589999116
+   ],
+   "rows": 1,
+   "correct": true
+  },
+  "q02_service_l1": {
+   "cold_s": 2.606159013999786,
+   "hot_s": [
+    1.9347284750001563,
+    2.178644431999601,
+    2.027695703000063
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q03_supplier_l1_x_service_l1": {
+   "cold_s": 3.4755485129999215,
+   "hot_s": [
+    2.6740833109997766,
+    2.4639089169995714,
+    2.3137326920004853
+   ],
+   "rows": 80,
+   "correct": true
+  },
+  "q04_top_products_governor": {
+   "cold_s": 14.955403450999256,
+   "hot_s": [
+    13.75937348699972,
+    13.451771402000304,
+    13.742550589999155
+   ],
+   "rows": 20,
+   "correct": true
+  },
+  "q05_supplier_subtree_filter": {
+   "cold_s": 1.6921193499993024,
+   "hot_s": [
+    0.9269536230003723,
+    1.0036174260003463,
+    0.8477069299997311
+   ],
+   "rows": 100,
+   "correct": true
+  },
+  "q06_recursive_governor_subtree": {
+   "cold_s": 8.052111227999376,
+   "hot_s": [
+    5.7420388729997285,
+    5.46520787999998,
+    5.739040575000217
+   ],
+   "rows": 50,
+   "correct": true
+  },
+  "q07_distinct_per_service_l1": {
+   "cold_s": 51.84686322500056,
+   "hot_s": [
+    51.481953579999754,
+    52.932210000999476,
+    49.21356557400031
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q08_top_suppliers": {
+   "cold_s": 4.805989913999838,
+   "hot_s": [
+    4.137741610000376,
+    4.139140870999654,
+    3.6909190260003015
+   ],
+   "rows": 100,
+   "correct": true
+  },
+  "q09_product_supplier_pairs": {
+   "cold_s": 64.81071971600068,
+   "hot_s": [
+    29.155421704999753,
+    30.05371802300033,
+    29.794651156999862
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q10_cross_charging": {
+   "cold_s": 3.6857410320008057,
+   "hot_s": [
+    3.2861822039994877,
+    3.3700890089994573,
+    3.447994789999939
+   ],
+   "rows": 56,
+   "correct": true
+  },
+  "q11_unit_price_by_service_l2": {
+   "cold_s": 2.1351047650005057,
+   "hot_s": [
+    1.6373546849999912,
+    1.5871480349997,
+    1.3677532319998136
+   ],
+   "rows": 10,
+   "correct": true
+  },
+  "q12_one_product": {
+   "cold_s": 1.6104919150002388,
+   "hot_s": [
+    0.7661418020006749,
+    0.6255678759998773,
+    0.5447301209997022
+   ],
+   "rows": 80,
+   "correct": true
+  },
+  "q13_rank_services_within_l1": {
+   "cold_s": 5.210942339000212,
+   "hot_s": [
+    3.6015230339999107,
+    3.4854601030001504,
+    3.712516601000061
+   ],
+   "rows": 30,
+   "correct": true
+  }
+ },
  "version": "PostgreSQL 18.6 (pgrust 0.4-beta, build 20911cc) on x86_64-unknown-linux-gnu, 64-bit",
- "error": "could not extend file \"base/5/16425.4\" with FileFallocate(): No space left on device\nHINT:  Check free disk space.\nCONTEXT:  COPY fact, line 94872000",
- "finished": "2026-11-18T20:18:28"
+ "load_steps": {
+  "copy_org": 0.16936540603637695,
+  "copy_service": 0.03540301322937012,
+  "copy_product": 0.5593039989471436,
+  "copy_fact": 66.86815547943115,
+  "vacuum_analyze_checkpoint": 12.201915264129639
+ },
+ "load_s": 79.84618544578552,
+ "sizes": {
+  "org": 10493952,
+  "service": 1269760,
+  "product": 45907968,
+  "fact": 5337047040
+ },
+ "finished": "2026-11-18T20:29:46"
 }
