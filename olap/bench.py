@@ -122,19 +122,18 @@ class PgEngine(Engine):
         args = []
         for a in self.cfg["args"]:
             args += ["-c", a]
-        args += ["-c", f"port={PG_PORT}", "-c", "listen_addresses=127.0.0.1"]
+        # The port goes in PGPORT, not -c: both images' entrypoints append our
+        # args after their own, so -c port/listen_addresses would override the
+        # socket-only settings of the temporary server they run initdb scripts
+        # against, and we would connect to (and load into) that one.
         extra = []
         if self.cfg.get("pgrust"):
             extra = ["--ulimit", "stack=67108864:67108864", "-e", "RUST_MIN_STACK=33554432"]
             args += ["-c", "max_stack_depth=60000"]
         self.docker_run(self.cfg["image"], ["postgres"] + args,
-                        env=["POSTGRES_PASSWORD=bench",
+                        env=["POSTGRES_PASSWORD=bench", f"PGPORT={PG_PORT}",
                              "POSTGRES_INITDB_ARGS=--no-locale --encoding=UTF8"],
                         extra=extra)
-        self.wait_ready()
-        # The image's entrypoint runs a temporary server for initdb first; make
-        # sure we're talking to the real one and that it's stable.
-        time.sleep(2)
         self.wait_ready()
 
     def connect(self):
