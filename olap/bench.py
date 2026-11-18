@@ -42,7 +42,10 @@ TABLES = ["org", "service", "product", "fact"]
 TIMEOUT_S = 1800
 
 
-def sh(*cmd, check=True, capture=True):
+def sh(*cmd, check=True, capture=True, merge=False):
+    if merge:
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        return r.stdout.strip()
     r = subprocess.run(cmd, capture_output=capture, text=True)
     if check and r.returncode:
         raise RuntimeError(f"{' '.join(cmd)}: {r.stderr.strip() or r.stdout.strip()}")
@@ -370,6 +373,13 @@ def cmd_run(a):
             json.dump(res, open(path, "w"), indent=1)
             json.dump(expected, open(expected_path, "w"), indent=1)
             log(f"{name}: wrote {os.path.relpath(path, HERE)}")
+            if "error" in res or any("error" in q for q in res["queries"].values()):
+                logs = sh("docker", "logs", "--tail", "300", eng.container, check=False, merge=True)
+                state = sh("docker", "inspect", "-f", "{{.State.Status}} exit={{.State.ExitCode}} "
+                           "oom={{.State.OOMKilled}}", eng.container, check=False, merge=True)
+                lpath = path[:-5] + ".log"
+                open(lpath, "w").write(f"container: {state}\n\n{logs}\n")
+                log(f"{name}: container {state}; server log in {os.path.relpath(lpath, HERE)}")
             if not a.keep:
                 eng.destroy()
     cmd_report(a)
