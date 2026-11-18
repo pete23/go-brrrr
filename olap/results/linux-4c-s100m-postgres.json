@@ -1,0 +1,164 @@
+{
+ "engine": "postgres",
+ "scale": "s100m",
+ "rows": 100000000,
+ "label": "linux-4c",
+ "started": "2026-11-18T19:27:24",
+ "machine": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_gib": 15.7,
+  "kernel": "6.18.44-fc-v595",
+  "container_memory_limit": "12g"
+ },
+ "cold_runs": true,
+ "page_cache_dropped": true,
+ "queries": {
+  "q01_full_scan": {
+   "cold_s": 5.582344255999942,
+   "hot_s": [
+    3.9271879460000036,
+    3.984778613999879,
+    3.5900530369999615
+   ],
+   "rows": 1,
+   "correct": null
+  },
+  "q02_service_l1": {
+   "cold_s": 8.818102596000017,
+   "hot_s": [
+    6.678490507999868,
+    6.806615646999944,
+    6.505816782000011
+   ],
+   "rows": 10,
+   "correct": null
+  },
+  "q03_supplier_l1_x_service_l1": {
+   "cold_s": 14.976199747999999,
+   "hot_s": [
+    13.763247888000024,
+    12.896256814000026,
+    12.981435432000126
+   ],
+   "rows": 80,
+   "correct": null
+  },
+  "q04_top_products_governor": {
+   "cold_s": 175.3305006229998,
+   "hot_s": [
+    171.165824165,
+    159.26723279199996,
+    160.34094859100014
+   ],
+   "rows": 20,
+   "correct": null
+  },
+  "q05_supplier_subtree_filter": {
+   "cold_s": 5.219539609999629,
+   "hot_s": [
+    3.7403068130001884,
+    3.600973026000247,
+    3.5972468770000887
+   ],
+   "rows": 100,
+   "correct": null
+  },
+  "q06_recursive_governor_subtree": {
+   "cold_s": 10.8226246549998,
+   "hot_s": [
+    9.847446020000007,
+    9.720321581999997,
+    9.716664085000048
+   ],
+   "rows": 50,
+   "correct": null
+  },
+  "q07_distinct_per_service_l1": {
+   "cold_s": 64.03530340400039,
+   "hot_s": [
+    65.16485351699976,
+    64.39211023100006,
+    65.77072697799986
+   ],
+   "rows": 10,
+   "correct": null
+  },
+  "q08_top_suppliers": {
+   "cold_s": 20.888658161999956,
+   "hot_s": [
+    18.195523262999814,
+    18.193493391000175,
+    18.3349666590002
+   ],
+   "rows": 100,
+   "correct": null
+  },
+  "q09_product_supplier_pairs": {
+   "cold_s": 207.41073345799987,
+   "hot_s": [
+    212.50859212800015,
+    216.00438578000012,
+    209.49693719300012
+   ],
+   "rows": 10,
+   "correct": null
+  },
+  "q10_cross_charging": {
+   "cold_s": 26.096771957999863,
+   "hot_s": [
+    22.0480973130002,
+    22.297474220999902,
+    22.112703569000132
+   ],
+   "rows": 56,
+   "correct": null
+  },
+  "q11_unit_price_by_service_l2": {
+   "cold_s": 7.7317249369998535,
+   "hot_s": [
+    6.370400892999896,
+    6.134322518999852,
+    5.709391804999996
+   ],
+   "rows": 10,
+   "correct": null
+  },
+  "q12_one_product": {
+   "cold_s": 4.001308794000124,
+   "hot_s": [
+    1.504223637999985,
+    1.3866680999999517,
+    1.3566808059999858
+   ],
+   "rows": 80,
+   "correct": null
+  },
+  "q13_rank_services_within_l1": {
+   "cold_s": 13.258781693999936,
+   "hot_s": [
+    11.68026203799991,
+    11.059519716999603,
+    10.626227722999829
+   ],
+   "rows": 30,
+   "correct": null
+  }
+ },
+ "version": "PostgreSQL 18.7 (Debian 18.7-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+ "load_steps": {
+  "copy_org": 0.20121073722839355,
+  "copy_service": 0.025117158889770508,
+  "copy_product": 0.6597597599029541,
+  "copy_fact": 72.58495092391968,
+  "vacuum_analyze_checkpoint": 19.256789207458496
+ },
+ "load_s": 92.74035811424255,
+ "sizes": {
+  "org": 10493952,
+  "service": 1269760,
+  "product": 45907968,
+  "fact": 5337047040
+ },
+ "finished": "2026-11-18T20:05:37"
+}

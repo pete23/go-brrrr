@@ -1,0 +1,20 @@
+{
+ "engine": "pgrust-heap",
+ "scale": "s100m",
+ "rows": 100000000,
+ "label": "linux-4c",
+ "started": "2026-11-18T20:05:40",
+ "machine": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 4,
+  "mem_gib": 15.7,
+  "kernel": "6.18.44-fc-v595",
+  "container_memory_limit": "12g"
+ },
+ "cold_runs": true,
+ "page_cache_dropped": true,
+ "queries": {},
+ "version": "PostgreSQL 18.6 (pgrust 0.4-beta, build 20911cc) on x86_64-unknown-linux-gnu, 64-bit",
+ "error": "consuming input failed: server closed the connection unexpectedly\n\tThis probably means the server terminated abnormally\n\tbefore or while processing the request.",
+ "finished": "2026-11-18T20:06:42"
+}
