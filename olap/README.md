@@ -102,4 +102,27 @@ Times are client wall clock, results included (all results are small).
 
 ## Results
 
-See [`results/report.md`](results/report.md).
+Full tables in [`results/report.md`](results/report.md). 100M rows on a 4-core Xeon VM
+(2.1 GHz, 16 GB), all answers identical across engines:
+
+| | postgres | pgrust-heap | pgrust-columnar | clickhouse |
+|---|---:|---:|---:|---:|
+| load (s) | 93 | 80 | 31 | 16 |
+| fact on disk (GiB) | 4.97 | 4.97 | 1.11 | 1.25 |
+| geomean hot (s) | 13.9 | 3.5 | **1.17** | 1.53 |
+| geomean cold (s) | 18.1 | 5.4 | 2.25 | **1.94** |
+
+- pgrust on plain heap tables is ~4x Postgres on the same on-disk format: that's the
+  query engine alone.
+- pgrcolumnar vs ClickHouse is close and query-dependent. pgrust wins scans, simple
+  rollups and filters (q01, q02, q05, q08, q11, q12); ClickHouse wins the
+  high-cardinality group by (q09: 3.7s vs 32s), the wide 4-way join + top-N (q04),
+  `count(DISTINCT)` (q07), the recursive CTE (q06) and the window query (q13).
+- pgrust's hot q12 (0.036s vs 0.5s cold) is its condition cache answering a repeated
+  filter, not a faster scan. Hot numbers flatter it on repeated identical queries; the
+  cold column is the fairer comparison.
+- Postgres is worst on q04 and q09 (160-210s), where it ends up sorting/grouping tens of
+  millions of rows of wide keys.
+
+Single machine, single run, no tuning beyond `PG_ARGS` and ClickHouse defaults. Treat
+differences under ~20% as noise.
