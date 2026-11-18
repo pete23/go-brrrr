@@ -31,10 +31,13 @@ PG_ARGS = [  # tuned for a 4-core, 12 GiB box, applied to Postgres and pgrust al
 
 ENGINES = {
     "postgres": dict(kind="pg", image="postgres:18", fact_using="", args=PG_ARGS),
+    # Mount points match each image's VOLUME, else Docker adds an anonymous volume
+    # that holds the data instead and outlives the container.
     "pgrust-heap": dict(kind="pg", image="malisper/pgrust:v0.4-beta-amd64", fact_using="",
-                        args=PG_ARGS, pgrust=True),
+                        args=PG_ARGS, pgrust=True, mount="/var/lib/postgresql/data"),
     "pgrust-columnar": dict(kind="pg", image="malisper/pgrust:v0.4-beta-amd64",
                             fact_using="USING pgrcolumnar", args=PG_ARGS, pgrust=True,
+                            mount="/var/lib/postgresql/data",
                             pre=["CREATE ACCESS METHOD pgrcolumnar TYPE TABLE HANDLER heap_tableam_handler"]),
     "clickhouse": dict(kind="ch", image="clickhouse/clickhouse-server:latest"),
 }
@@ -82,10 +85,10 @@ class Engine:
         self.volume = f"olap-{name}-data"
 
     def docker_run(self, image, args, env=(), extra=()):
-        sh("docker", "rm", "-f", self.container, check=False)
+        sh("docker", "rm", "-f", "-v", self.container, check=False)
         cmd = ["docker", "run", "-d", "--name", self.container, "--network", "host",
                "--memory", MEMORY, "--memory-swap", MEMORY, "--shm-size", SHM,
-               "-v", f"{self.volume}:{self.mount}",
+               "-v", f"{self.volume}:{self.cfg.get('mount', self.mount)}",
                "-v", f"{self.data_dir}:/data:ro"]
         for e in env:
             cmd += ["-e", e]
@@ -93,7 +96,7 @@ class Engine:
         sh(*cmd)
 
     def destroy(self):
-        sh("docker", "rm", "-f", self.container, check=False)
+        sh("docker", "rm", "-f", "-v", self.container, check=False)
         sh("docker", "volume", "rm", "-f", self.volume, check=False)
 
     def restart(self):

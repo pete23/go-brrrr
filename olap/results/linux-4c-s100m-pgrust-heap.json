@@ -3,7 +3,7 @@
  "scale": "s100m",
  "rows": 100000000,
  "label": "linux-4c",
- "started": "2026-11-18T20:05:40",
+ "started": "2026-11-18T20:17:24",
  "machine": {
   "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
   "cores": 4,
@@ -15,6 +15,6 @@
  "page_cache_dropped": true,
  "queries": {},
  "version": "PostgreSQL 18.6 (pgrust 0.4-beta, build 20911cc) on x86_64-unknown-linux-gnu, 64-bit",
- "error": "consuming input failed: server closed the connection unexpectedly\n\tThis probably means the server terminated abnormally\n\tbefore or while processing the request.",
- "finished": "2026-11-18T20:06:42"
+ "error": "could not extend file \"base/5/16425.4\" with FileFallocate(): No space left on device\nHINT:  Check free disk space.\nCONTEXT:  COPY fact, line 94872000",
+ "finished": "2026-11-18T20:18:28"
 }
